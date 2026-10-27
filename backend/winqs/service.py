@@ -419,19 +419,17 @@ class SystemService:
 
     def setup_rtss(self):
         """Start the one-time RTSS setup elevated. Windows shows its UAC prompt; returns without waiting."""
-        import ctypes
         import subprocess
         script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "setup_rtss.ps1")
         sid = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True,
-                             creationflags=0x08000000, timeout=10).stdout.strip().split(",")[-1].strip('"')
+                             creationflags=subprocess.CREATE_NO_WINDOW, timeout=10).stdout.strip().split(",")[-1].strip('"')
         log = os.path.join(os.path.dirname(self.state_file), "setup_rtss.log")
         args = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%s" -UserSid %s -Log "%s"' % (script, sid, log)
-        shell = ctypes.WinDLL("shell32")
-        shell.ShellExecuteW.restype = ctypes.c_ssize_t
-        rc = shell.ShellExecuteW(None, "runas", "powershell.exe", args, None, 0)
         self._rtss.forget_status()
-        if rc <= 32:
-            raise OSError(rc, "the setup was not started (cancelled?)")
+        try:
+            os.startfile("powershell.exe", "runas", args, None, 0)  # ShellExecute "runas": Windows' UAC prompt, hidden
+        except OSError as e:
+            raise OSError(e.errno, "the setup was not started (cancelled?)") from e
         return {"started": True}
 
     @staticmethod

@@ -46,8 +46,10 @@ The plugin's own Decky page is intentionally empty: everything lives in Steam's 
 
 - `main.py` is the Decky backend entry point. `backend/winqs/` talks to Windows directly: Windows Runtime APIs
   (radios, network connectivity, battery, Bluetooth devices, search and pairing) through [pywinrt](https://github.com/pywinrt/pywinrt),
-  bundled in `py_modules/` with `typing_extensions`, and Win32 / COM APIs through `ctypes` (WLAN API, Core Audio,
-  DisplayConfig, Intel IGCL, RTSS hooks API).
+  bundled in `py_modules/` with `typing_extensions`; Core Audio through [pycaw](https://github.com/AndreMiras/pycaw) and
+  [comtypes](https://github.com/enthought/comtypes); processes through [psutil](https://github.com/giampaolo/psutil);
+  and the remaining Win32 / vendor APIs through `ctypes` (WLAN API, DisplayConfig, power settings, Intel IGCL, RTSS
+  hooks API). Licenses of the bundled libraries are in `py_modules/LICENSES`.
 - `dist/index.js` is the frontend. It injects its sections into Steam's Quick Access Menu tabs and uses Steam's own
   components and localization strings wherever they exist.
 

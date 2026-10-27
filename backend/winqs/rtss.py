@@ -14,6 +14,8 @@ import os
 import re
 import subprocess
 import winreg
+
+import psutil
 from ctypes import byref, c_bool, c_char_p, c_int32, c_uint32, c_void_p, wintypes
 
 TASK = "WinQS RTSS"
@@ -37,38 +39,8 @@ EXE = os.path.join(DIR, "RTSS.exe")
 HOOKS = os.path.join(DIR, "RTSSHooks64.dll")
 GLOBAL = os.path.join(DIR, "Profiles", "Global")
 
-_k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-
-
-class _PE(ctypes.Structure):
-    _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
-                ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
-                ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD),
-                ("szExeFile", ctypes.c_wchar * 260)]
-
-
-_k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
-_k32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
-_k32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_PE)]
-_k32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_PE)]
-_k32.CloseHandle.argtypes = [wintypes.HANDLE]
-INVALID_HANDLE = ctypes.c_void_p(-1).value
-
-
 def running():
-    snap = _k32.CreateToolhelp32Snapshot(2, 0)  # TH32CS_SNAPPROCESS
-    if not snap or snap == INVALID_HANDLE:
-        return False
-    try:
-        e = _PE(dwSize=ctypes.sizeof(_PE))
-        ok = _k32.Process32FirstW(snap, byref(e))
-        while ok:
-            if e.szExeFile.lower() == "rtss.exe":
-                return True
-            ok = _k32.Process32NextW(snap, byref(e))
-    finally:
-        _k32.CloseHandle(snap)
-    return False
+    return any((p.info["name"] or "").lower() == "rtss.exe" for p in psutil.process_iter(["name"]))
 
 
 def _run(args, timeout=10):

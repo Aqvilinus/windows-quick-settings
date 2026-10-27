@@ -7,7 +7,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 - OneXPlayer 3 (Core Ultra, Arc B390), Windows 11 in Xbox full-screen mode, home app OmniConsole. The panel is 1920x1200 with VRR, 30–144 Hz.
 - OneXConsole (vendor app, elevated) owns TDP, fans, buttons and its own RTSS OSD.
 - Decky Loader 3.3.0 for Windows, unelevated. Settings are in `%USERPROFILE%\homebrew\settings\windows-quick-settings`, logs in `homebrew\logs\windows-quick-settings`.
-- The backend runs on Decky's frozen Python 3.11 (no pip). Vendored libraries go in `py_modules/` (Decky adds it to `sys.path`): pywinrt (`winrt-runtime` + namespaces, cp311 win_amd64) and `typing_extensions`. Older modules use `ctypes` directly.
+- The backend runs on Decky's frozen Python 3.11 (no pip). Vendored libraries go in `py_modules/` (Decky adds it to `sys.path`): pywinrt (`winrt-runtime` + namespaces, cp311 win_amd64), `typing_extensions`, `comtypes` + `pycaw` (Core Audio), `psutil` (abi3: needs `python3.dll`, placed next to `_psutil_windows.pyd` because Decky's frozen Python has none). Licenses in `py_modules/LICENSES`. The rest uses `ctypes` for Win32 / vendor DLLs.
 - Steam CEF DevTools: `http://127.0.0.1:8080`. Decky runs in the `SharedJSContext` target.
 
 ## Layout
@@ -15,11 +15,11 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 - `main.py`: backend entry. `Plugin` methods are the callables, run on one worker thread via `_call`.
 - `backend/winqs/`:
   - `service.py`: `state()` for the Quick Settings tab, `perf_state()` for the Performance tab, all actions.
-  - `com.py`: COM over ctypes, plus `init_worker` (MTA, EcoQoS off). WinRT goes through pywinrt.
+  - `com.py`: sets `sys.coinit_flags = 0` (comtypes initialises COM on import; the process is MTA for pywinrt), `GUID`, `init_worker` (MTA, EcoQoS off). Import it before comtypes.
   - `radios.py`, `nlm.py` (pywinrt): radio on/off (`Windows.Devices.Radios`); internet status (`NetworkConnectivityLevel`).
   - `wlan.py` (Native Wifi API over ctypes): Wi-Fi scan, connect, forget. WinRT can't delete profiles, so it stays.
   - `bt.py` (pywinrt): Bluetooth paired list (watchers kept running), search, pairing, removal.
-  - `btaudio.py`, `audio.py` (Core Audio over ctypes; WinRT has no endpoint volume / default device / BT audio connect).
+  - `audio.py` (pycaw interfaces: volume, mute, devices, IPolicyConfig default switch), `btaudio.py` (comtypes declarations of IDeviceTopology / IConnector / IPart / IKsControl for the BT audio one-shot connect). `IMMDevice.GetId` goes through comtypes' raw `__com_GetId` so the string is freed (it runs on every poll).
   - `brightness.py`, `nightlight.py`, `hdr.py`, `display.py`, `battery.py`: brightness, Night light, HDR, the current refresh rate (read only, the Frame Limit slider's top), battery (`Windows.Devices.Power`, pywinrt).
   - `rtss.py` + `../setup_rtss.ps1`, `framelimit.py`: frame limit through RTSS; Intel IGCL fallback.
   - `hotkeys.py`: Ctrl+1 / Ctrl+2 for Steam's side menus in games.
@@ -72,7 +72,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - Test with `SetFakeLocalSystemState(2)` and reset to 0.
 - **Client settings:** `settingsStore.GetClientSetting(k)` returns `[value, setter]`; Steam mirrors writes back 0.03–3 s later.
 - Steam's Performance Monitor is native (`gameoverlayrenderer64.dll`) and can't be extended.
-- **Checked dead ends** (2026-10-28): Steam's `SteamClient.System.Display.SetBrightness` reports success on Windows but doesn't change the panel; `BrightnessOverride.GetDefaultForSystem` fails unpackaged; WinRT has no HDR toggle, no endpoint volume / default audio device, no Wi-Fi profile removal. pywinrt can't call classic COM, so `audio.py`, `btaudio.py`, `brightness.py`, `hdr.py`, `wlan.py` stay on ctypes.
+- **Checked dead ends** (2026-10-28): Steam's `SteamClient.System.Display.SetBrightness` reports success on Windows but doesn't change the panel; `BrightnessOverride.GetDefaultForSystem` fails unpackaged; WinRT has no HDR toggle, no endpoint volume / default audio device, no Wi-Fi profile removal. pywinrt can't call classic COM (audio goes through comtypes/pycaw). No proven library wraps powrprof, DisplayConfig, WLAN, IGCL, RTSSHooks or SetWinEventHook, so `brightness.py`, `hdr.py`, `wlan.py`, `framelimit.py`, `rtss.py` and part of `hotkeys.py` stay on ctypes.
 - **CDP trap:** `connect(2, name)` from DevTools replaces the plugin's event listeners. Save and restore `DeckyPluginLoader.pluginEventListeners.get(name)`.
 - **Bluetooth** (`bt.py`, "Add Device" dialog, Y = Forget on paired rows, by endpoint id):
   - Paired list: DeviceWatchers over the "paired" selectors with `System.Devices.Aep.IsConnected`, kept running; a poll reads the snapshot (0 ms). It includes LE devices.

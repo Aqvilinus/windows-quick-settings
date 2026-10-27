@@ -1,154 +1,119 @@
 """Connect / disconnect paired Bluetooth audio devices (experimental).
 
-Same mechanism as the Windows sound settings "Connect" button: the Bluetooth audio
-KS filter behind an audio endpoint accepts the one-shot properties
-KSPROPERTY_ONESHOT_RECONNECT (0) / KSPROPERTY_ONESHOT_DISCONNECT (1) of
-KSPROPSETID_BtAudio.
+Same mechanism as the Windows sound settings "Connect" button: the Bluetooth audio KS filter behind an audio
+endpoint accepts the one-shot properties KSPROPERTY_ONESHOT_RECONNECT (0) / KSPROPERTY_ONESHOT_DISCONNECT (1) of
+KSPROPSETID_BtAudio. Endpoint -> IDeviceTopology -> connector -> the filter's IPart -> IKsControl.
 
-Vtables used:
-  IMMDeviceEnumerator: 3 EnumAudioEndpoints
-  IMMDeviceCollection: 3 GetCount, 4 Item
-  IMMDevice:           3 Activate, 4 OpenPropertyStore, 5 GetId, 6 GetState
-  IPropertyStore:      5 GetValue
-  IDeviceTopology:     3 GetConnectorCount, 4 GetConnector
-  IConnector:          8 GetConnectedTo
-  IPart:               13 Activate
-  IKsControl:          3 KsProperty
+pycaw has no device topology interfaces, so the four used here are declared below (comtypes), in the order of
+devicetopology.h / ks.h; methods we don't call are placeholders that keep the vtable order.
 """
+from . import com  # noqa: F401 - must come before comtypes: COM in this process is multithreaded (pywinrt needs it)
+
 import ctypes
-from ctypes import POINTER, byref, c_int32, c_uint32, c_void_p
+from ctypes import HRESULT, POINTER, c_void_p
+from ctypes.wintypes import DWORD, UINT, ULONG
 
-from .com import GUID, check, co_create, propvariant_clear, qi, release, vcall
+from comtypes import CLSCTX_ALL, COMError, COMMETHOD, GUID, IUnknown
 
-CLSID_MMDeviceEnumerator = "BCDE0395-E52F-467C-8E3D-C4579291692E"
-IID_IMMDeviceEnumerator = "A95664D2-9614-4F35-A746-DE8DB63617E6"
-IID_IDeviceTopology = "2A07407E-6497-4A18-9787-32F79BD0D98F"
-IID_IPart = "AE2DE0E4-5BCA-4F2D-AA46-5D13F8FDB3A9"
-IID_IKsControl = "28F54685-06FD-11D2-B27A-00A0C9223196"
-KSPROPSETID_BtAudio = "7FA06C40-B8F6-4C7E-8556-E8C33A12E54D"
+from .audio import enumerator, prop_string
 
-PKEY_DeviceInterface_FriendlyName = ("026E516E-B814-414B-83CD-856D6FEF4822", 2)
-PKEY_Device_EnumeratorName = ("A45C254E-DF1C-4EFD-8020-67D146A850E0", 24)
-
+KSPROPSETID_BtAudio = GUID("{7FA06C40-B8F6-4C7E-8556-E8C33A12E54D}")
+KSPROPERTY_TYPE_GET = 1
+PKEY_DeviceInterface_FriendlyName = ("{026E516E-B814-414B-83CD-856D6FEF4822}", 2)
+PKEY_Device_EnumeratorName = ("{A45C254E-DF1C-4EFD-8020-67D146A850E0}", 24)
 DEVICE_STATE_ACTIVE = 0x1
 DEVICE_STATE_UNPLUGGED = 0x8
 E_RENDER, E_CAPTURE = 0, 1
 
 
-class PROPERTYKEY(ctypes.Structure):
-    _fields_ = [("fmtid", GUID), ("pid", ctypes.c_uint32)]
+def _unused(n):
+    return COMMETHOD([], HRESULT, "Unused%d" % n)
 
 
 class KSPROPERTY(ctypes.Structure):
-    _fields_ = [("Set", GUID), ("Id", ctypes.c_uint32), ("Flags", ctypes.c_uint32)]
+    _fields_ = [("Set", GUID), ("Id", ULONG), ("Flags", ULONG)]
 
 
-def _prop_string(store, key):
-    pk = PROPERTYKEY(GUID.of(key[0]), key[1])
-    buf = (ctypes.c_ubyte * 32)()  # PROPVARIANT is 24 bytes on x64
-    hr = vcall(store, 5, [POINTER(PROPERTYKEY), c_void_p], byref(pk), ctypes.addressof(buf))
-    if hr < 0:
-        return ""
-    try:
-        vt = ctypes.c_uint16.from_buffer(buf, 0).value
-        if vt == 31:  # VT_LPWSTR
-            p = c_void_p.from_buffer(buf, 8).value
-            return ctypes.wstring_at(p) if p else ""
-        return ""
-    finally:
-        propvariant_clear(ctypes.addressof(buf))
+class IKsControl(IUnknown):
+    _iid_ = GUID("{28F54685-06FD-11D2-B27A-00A0C9223196}")
+    _methods_ = [
+        COMMETHOD([], HRESULT, "KsProperty", (["in"], POINTER(KSPROPERTY), "Property"), (["in"], ULONG, "PropertyLength"),
+                  (["in"], c_void_p, "PropertyData"), (["in"], ULONG, "DataLength"),
+                  (["out"], POINTER(ULONG), "BytesReturned")),
+        _unused(1),  # KsMethod
+        _unused(2),  # KsEvent
+    ]
+
+
+class IPart(IUnknown):
+    _iid_ = GUID("{AE2DE0E4-5BCA-4F2D-AA46-5D13F8FDB3A9}")
+    _methods_ = [_unused(i) for i in range(10)] + [  # GetName ... GetTopologyObject
+        COMMETHOD([], HRESULT, "Activate", (["in"], DWORD, "dwClsContext"), (["in"], POINTER(GUID), "refiid"),
+                  (["out"], POINTER(POINTER(IUnknown)), "ppvObject")),
+    ]
+
+
+class IConnector(IUnknown):
+    _iid_ = GUID("{9C2C4058-23F5-41DE-877A-DF3AF236A09E}")
+
+
+IConnector._methods_ = [_unused(i) for i in range(5)] + [  # GetType, GetDataFlow, ConnectTo, Disconnect, IsConnected
+    COMMETHOD([], HRESULT, "GetConnectedTo", (["out"], POINTER(POINTER(IConnector)), "ppConTo")),
+]
+
+
+class IDeviceTopology(IUnknown):
+    _iid_ = GUID("{2A07407E-6497-4A18-9787-32F79BD0D98F}")
+    _methods_ = [
+        COMMETHOD([], HRESULT, "GetConnectorCount", (["out"], POINTER(UINT), "pCount")),
+        COMMETHOD([], HRESULT, "GetConnector", (["in"], UINT, "nIndex"), (["out"], POINTER(POINTER(IConnector)), "ppConnector")),
+    ]
 
 
 def _bt_endpoints():
-    """Yield (IMMDevice ptr, interface friendly name, enumerator, state). Caller releases pointers."""
-    enum = co_create(CLSID_MMDeviceEnumerator, IID_IMMDeviceEnumerator)
-    try:
-        for flow in (E_RENDER, E_CAPTURE):
-            coll = c_void_p()
-            if vcall(enum, 3, [c_int32, c_uint32, POINTER(c_void_p)], flow,
-                     DEVICE_STATE_ACTIVE | DEVICE_STATE_UNPLUGGED, byref(coll)) < 0:
-                continue
-            try:
-                n = c_uint32()
-                check(vcall(coll, 3, [POINTER(c_uint32)], byref(n)), "IMMDeviceCollection.GetCount")
-                for i in range(n.value):
-                    dev = c_void_p()
-                    if vcall(coll, 4, [c_uint32, POINTER(c_void_p)], i, byref(dev)) < 0:
-                        continue
-                    store = c_void_p()
-                    keep = False
-                    try:
-                        if vcall(dev, 4, [c_uint32, POINTER(c_void_p)], 0, byref(store)) >= 0:  # STGM_READ
-                            enumerator = _prop_string(store, PKEY_Device_EnumeratorName).upper()
-                            name = _prop_string(store, PKEY_DeviceInterface_FriendlyName)
-                            if enumerator.startswith("BTH"):
-                                state = c_uint32()
-                                vcall(dev, 6, [POINTER(c_uint32)], byref(state))
-                                keep = True
-                                yield dev, name, enumerator, state.value
-                    finally:
-                        release(store)
-                        if not keep:
-                            release(dev)
-            finally:
-                release(coll)
-    finally:
-        release(enum)
+    """Yield (IMMDevice, interface friendly name, enumerator name, state) for Bluetooth audio endpoints."""
+    enum = enumerator()
+    for flow in (E_RENDER, E_CAPTURE):
+        try:
+            coll = enum.EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE | DEVICE_STATE_UNPLUGGED)
+        except COMError:
+            continue
+        for i in range(coll.GetCount()):
+            dev = coll.Item(i)
+            enumerator_name = prop_string(dev, PKEY_Device_EnumeratorName).upper()
+            if enumerator_name.startswith("BTH"):
+                yield dev, prop_string(dev, PKEY_DeviceInterface_FriendlyName), enumerator_name, dev.GetState()
 
 
 def list_audio_devices():
     """Names of paired Bluetooth audio devices known to the audio stack, with connection state."""
     devices = {}
-    for dev, name, enumerator, state in _bt_endpoints():
-        release(dev)
+    for _dev, name, enumerator_name, state in _bt_endpoints():
         d = devices.setdefault(name, {"name": name, "connected": False, "profiles": []})
         d["connected"] = d["connected"] or state == DEVICE_STATE_ACTIVE
-        d["profiles"].append("A2DP" if enumerator == "BTHENUM" else "HFP" if "HF" in enumerator else enumerator)
+        d["profiles"].append("A2DP" if enumerator_name == "BTHENUM" else "HFP" if "HF" in enumerator_name else enumerator_name)
     return sorted(devices.values(), key=lambda d: d["name"].lower())
 
 
 def _oneshot(dev, prop_id):
-    topo, conn, other, part, ks = c_void_p(), c_void_p(), c_void_p(), c_void_p(), c_void_p()
-    try:
-        iid = GUID.of(IID_IDeviceTopology)
-        check(vcall(dev, 3, [POINTER(GUID), c_uint32, c_void_p, POINTER(c_void_p)], byref(iid), 23, None, byref(topo)),
-              "IMMDevice.Activate(IDeviceTopology)")
-        check(vcall(topo, 4, [c_uint32, POINTER(c_void_p)], 0, byref(conn)), "IDeviceTopology.GetConnector")
-        check(vcall(conn, 8, [POINTER(c_void_p)], byref(other)), "IConnector.GetConnectedTo")
-        part = qi(other, IID_IPart)
-        iid_ks = GUID.of(IID_IKsControl)
-        check(vcall(part, 13, [c_uint32, POINTER(GUID), POINTER(c_void_p)], 23, byref(iid_ks), byref(ks)), "IPart.Activate(IKsControl)")
-        prop = KSPROPERTY(GUID.of(KSPROPSETID_BtAudio), prop_id, 1)  # KSPROPERTY_TYPE_GET
-        returned = c_uint32()
-        check(vcall(ks, 3, [POINTER(KSPROPERTY), c_uint32, c_void_p, c_uint32, POINTER(c_uint32)],
-                    byref(prop), ctypes.sizeof(prop), None, 0, byref(returned)), "IKsControl.KsProperty")
-    finally:
-        for p in (ks, part, other, conn, topo):
-            release(p)
+    topo = dev.Activate(IDeviceTopology._iid_, CLSCTX_ALL, None).QueryInterface(IDeviceTopology)
+    part = topo.GetConnector(0).GetConnectedTo().QueryInterface(IPart)
+    ks = part.Activate(CLSCTX_ALL, IKsControl._iid_).QueryInterface(IKsControl)
+    prop = KSPROPERTY(KSPROPSETID_BtAudio, prop_id, KSPROPERTY_TYPE_GET)
+    ks.KsProperty(prop, ctypes.sizeof(prop), None, 0)
 
 
 def set_connected(name, connect):
     """Connect (True) or disconnect (False) the paired Bluetooth audio device called `name`."""
-    targets = []
-    for dev, ep_name, enumerator, state in _bt_endpoints():
-        if ep_name == name:
-            targets.append((0 if enumerator == "BTHENUM" else 1, dev))  # prefer the A2DP endpoint
-        else:
-            release(dev)
+    targets = sorted(((0 if enum_name == "BTHENUM" else 1), i, dev)  # prefer the A2DP endpoint
+                     for i, (dev, ep_name, enum_name, _state) in enumerate(_bt_endpoints()) if ep_name == name)
     if not targets:
         raise RuntimeError("no Bluetooth audio endpoint named %r" % name)
-    targets.sort(key=lambda t: t[0])
     last_error = None
-    done = False
-    for _prio, dev in targets:
+    for _prio, _i, dev in targets:
         try:
-            if not done:
-                _oneshot(dev, 0 if connect else 1)
-                done = True
-        except OSError as e:
+            _oneshot(dev, 0 if connect else 1)
+            return True
+        except COMError as e:
             last_error = e
-        finally:
-            release(dev)
-    if not done:
-        raise last_error or RuntimeError("connect failed")
-    return True
+    raise last_error or RuntimeError("connect failed")

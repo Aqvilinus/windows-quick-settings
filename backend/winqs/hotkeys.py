@@ -19,9 +19,10 @@ import re
 import threading
 from ctypes import wintypes
 
+import psutil
+
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-_ntdll = ctypes.WinDLL("ntdll")
 
 WINEVENTPROC = ctypes.WINFUNCTYPE(None, wintypes.HANDLE, wintypes.DWORD, wintypes.HWND, wintypes.LONG,
                                   wintypes.LONG, wintypes.DWORD, wintypes.DWORD)
@@ -45,12 +46,6 @@ _user32.GetForegroundWindow.restype = wintypes.HWND
 _user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
 _user32.GetWindowThreadProcessId.restype = wintypes.DWORD
 _kernel32.GetCurrentThreadId.restype = wintypes.DWORD
-_kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-_kernel32.OpenProcess.restype = wintypes.HANDLE
-_kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-_ntdll.NtQueryInformationProcess.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.ULONG,
-                                             ctypes.POINTER(wintypes.ULONG)]
-_ntdll.NtQueryInformationProcess.restype = ctypes.c_long
 
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
@@ -61,31 +56,15 @@ MOD_NOREPEAT = 0x4000
 EVENT_SYSTEM_FOREGROUND = 0x0003
 WINEVENT_OUTOFCONTEXT = 0x0000
 WINEVENT_SKIPOWNPROCESS = 0x0002
-PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-ProcessCommandLineInformation = 60
 HOTKEYS = {1: ("main", 0x31), 2: ("qam", 0x32)}  # id -> (menu, VK '1' / '2')
 _PID_ARG = re.compile(r"(?:^|\s)-pid\s+(\d+)")
 
 
 def _command_line(pid):
-    h = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-    if not h:
-        return None
     try:
-        size = wintypes.ULONG(0)
-        _ntdll.NtQueryInformationProcess(h, ProcessCommandLineInformation, None, 0, ctypes.byref(size))
-        if not size.value:
-            return None
-        buf = ctypes.create_string_buffer(size.value)
-        if _ntdll.NtQueryInformationProcess(h, ProcessCommandLineInformation, buf, size, ctypes.byref(size)) < 0:
-            return None
-
-        class UNICODE_STRING(ctypes.Structure):
-            _fields_ = [("Length", wintypes.USHORT), ("MaximumLength", wintypes.USHORT), ("Buffer", ctypes.c_void_p)]
-        us = UNICODE_STRING.from_buffer(buf)
-        return ctypes.wstring_at(us.Buffer, us.Length // 2) if us.Buffer else None
-    finally:
-        _kernel32.CloseHandle(h)
+        return " ".join(psutil.Process(pid).cmdline())
+    except (psutil.Error, OSError):  # gone, or not ours to read
+        return None
 
 
 def game_pid_of_overlay(overlay_pid):
