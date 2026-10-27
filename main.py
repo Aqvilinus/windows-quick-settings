@@ -114,6 +114,24 @@ class Plugin:
     async def bluetooth_audio(self, name, connect):
         return await self._call("bluetooth_audio", lambda: self.svc.bluetooth_audio(str(name), bool(connect)), timeout=20)
 
+    async def bt_scan(self, on):
+        return await self._call("bt_scan", lambda: self.svc.bt_scan(bool(on)), timeout=15)
+
+    async def bt_scan_results(self):
+        return await self._call("bt_scan_results", lambda: self.svc.bt_scan_results(), timeout=10)
+
+    async def bt_pair(self, device_id):
+        return await self._call("bt_pair", lambda: self.svc.bt_pair(str(device_id)), timeout=15)
+
+    async def bt_pair_answer(self, accept):
+        return await self._call("bt_pair_answer", lambda: self.svc.bt_pair_answer(bool(accept)), timeout=10)
+
+    async def bt_pair_cancel(self):
+        return await self._call("bt_pair_cancel", lambda: self.svc.bt_pair_cancel(), timeout=10)
+
+    async def bt_forget(self, address):
+        return await self._call("bt_forget", lambda: self.svc.bt_forget(str(address)), timeout=20)
+
     async def perf_state(self):
         return await self._call("perf_state", lambda: self.svc.perf_state(), timeout=10)
 

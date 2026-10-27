@@ -39,6 +39,12 @@ const be = {
     wifiDisconnect: callable("wifi_disconnect"),
     wifiForget: callable("wifi_forget"),
     bluetoothDevices: callable("bluetooth_devices"),
+    btScan: callable("bt_scan"),
+    btScanResults: callable("bt_scan_results"),
+    btPair: callable("bt_pair"),
+    btPairAnswer: callable("bt_pair_answer"),
+    btPairCancel: callable("bt_pair_cancel"),
+    btForget: callable("bt_forget"),
     bluetoothAudio: callable("bluetooth_audio"),
     openSettings: callable("open_settings"),
     perfState: callable("perf_state"),
@@ -85,6 +91,11 @@ const T = IS_RU ? {
     notFound: "Сеть больше не видна", unsupported: (s) => `Тип защиты ${s} не поддерживается, подключитесь через настройки Windows`,
     passwordRequired: "Нужен пароль", disconnectQ: "Отключиться от этой сети?",
     btNoControl: "Это устройство подключается само, отдельной кнопки подключения у Windows для него нет",
+    btPairing: "Сопряжение…", btNoneFound: "Устройства не найдены. Включите на устройстве режим сопряжения",
+    btPinMatch: (name, pin) => `Убедитесь, что на устройстве «${name}» показан код ${pin}`,
+    btTypePin: (pin) => `Введите на устройстве код ${pin} и нажмите Enter`,
+    btForgetQ: "Удалить это устройство? Чтобы снова пользоваться им, понадобится повторное сопряжение",
+    btForgotten: "Устройство удалено",
     experimental: "Экспериментально", accessDenied: "Windows не разрешила переключить радиомодуль",
     windowsSettings: "Настройки Windows", allNetworks: "Все сети",
     showPassword: "Показать пароль", wrongPasswordShort: "Неверный пароль, попробуйте ещё раз", secured: "Защищена",
@@ -106,6 +117,11 @@ const T = IS_RU ? {
     notFound: "The network is no longer visible", unsupported: (s) => `${s} security is not supported, connect in Windows settings`,
     passwordRequired: "Password required", disconnectQ: "Disconnect from this network?",
     btNoControl: "This device connects by itself; Windows has no connect button for it",
+    btPairing: "Pairing…", btNoneFound: "No devices found. Put the device in pairing mode",
+    btPinMatch: (name, pin) => `Make sure ${name} shows the code ${pin}`,
+    btTypePin: (pin) => `Type ${pin} on the device, then press Enter`,
+    btForgetQ: "Remove this device? You will need to pair it again to use it",
+    btForgotten: "Device removed",
     experimental: "Experimental", accessDenied: "Windows did not allow switching the radio",
     windowsSettings: "Windows settings", allNetworks: "All networks",
     showPassword: "Show password", wrongPasswordShort: "Wrong password, try again", secured: "Secured",
@@ -137,6 +153,14 @@ const S = {
     btDisconnect: () => L("QuickAccess_Tab_Bluetooth_Disconnect", "Disconnect"),
     btNone: () => L("QuickAccess_Tab_Bluetooth_Section_Devices_NonePaired", "No devices paired"),
     btAdd: () => L("QuickAccess_Tab_Bluetooth_AddDevice", "Add Device"),
+    btAvailable: () => L("QuickAccess_Tab_Bluetooth_Available_To_Pair", "Available to pair"),
+    btSearching: () => L("QuickAccess_Tab_Bluetooth_Searching", "Searching for devices..."),
+    btPair: () => L("QuickAccess_Tab_Bluetooth_Pair", "Pair"),
+    btPaired: () => L("QuickAccess_Tab_Bluetooth_Paired", "Paired"),
+    btCancelPair: () => L("QuickAccess_Tab_Bluetooth_CancelPair", "Cancel Pairing"),
+    btForget: () => L("QuickAccess_Tab_Bluetooth_Forget", "Forget"),
+    btForgetDevice: () => L("QuickAccess_Tab_Bluetooth_Unpair", "Forget Device"),
+    pairFailed: () => L("RemotePlay_PairWifiAPResult_Fail", "Pairing Failed"),
 };
 function toast(body) {
     try { toaster.toast({ title: manifest.name, body: String(body) }); }
@@ -759,8 +783,23 @@ function BtDeviceRow({ device: d }) {
         icon: jsx("span", { style: isConnected ? DIM : undefined, children: deviceIcon(d.type) }),
         indentLevel: 1, bottomSeparator: "none", focusable: true, highlightOnFocus: true,
         onActivate: activate, onClick: activate,
+        onOptionsButton: () => forgetBtDevice(d), onOptionsActionDescription: S.btForget(),
         children: working ? jsx(DFL.Spinner, { style: { height: "1.2em" } }) : null,
     });
+}
+function forgetBtDevice(d) {
+    showModalHere(jsx(DFL.ConfirmModal, {
+        strTitle: d.name, strDescription: T.btForgetQ, strOKButtonText: S.btForgetDevice(),
+        onOK: async () => {
+            try {
+                await call(be.btForget, d.address);
+                toast(T.btForgotten);
+            }
+            catch (e) { toast(errText(e)); }
+            await refresh();
+            emit();
+        },
+    }));
 }
 async function openSettingsPage(page) {
     try {
@@ -769,7 +808,116 @@ async function openSettingsPage(page) {
     }
     catch (e) { toast(errText(e)); }
 }
-const addBtDevice = () => openSettingsPage("bluetooth");
+// ---------------------------------------------------------------- Bluetooth pairing ("Add Device")
+// Search and pairing run in the backend (WinRT, btpair.py); the dialog polls their state. Steam's own strings where
+// Steam has them (Available to pair, Searching for devices..., Pair, Cancel Pairing, Paired).
+const PAIR_ACTIVE = new Set(["pairing", "confirm", "display_pin"]);
+function BtPairModal({ closeModal }) {
+    const [res, setRes] = useState(null); // { scanning, devices, pairing }
+    const alive = useRef(true);
+    const handled = useRef(null); // the pairing step already shown (prompt, toast)
+    const order = useRef([]);     // keep rows where they are while the dialog is open
+    const lastPairing = useRef(null);
+    const stable = (list) => {
+        const pos = new Map(order.current.map((id, i) => [id, i]));
+        const out = list.filter((d) => pos.has(d.id)).sort((a, b) => pos.get(a.id) - pos.get(b.id))
+            .concat(list.filter((d) => !pos.has(d.id)));
+        order.current = out.map((d) => d.id);
+        return out;
+    };
+    const onPairing = (pr, first) => {
+        if (!pr) return;
+        const step = [pr.state, pr.id, pr.pin || ""].join("|");
+        if (step === handled.current) return;
+        handled.current = step;
+        if (first) return; // a result left over from before the dialog opened
+        const name = pr.name || "";
+        if (pr.state === "confirm") {
+            showModalHere(jsx(DFL.ConfirmModal, {
+                strTitle: name, strDescription: T.btPinMatch(name, pr.pin), strOKButtonText: S.btPair(),
+                onOK: () => call(be.btPairAnswer, true).catch(() => { }),
+                onCancel: () => call(be.btPairAnswer, false).catch(() => { }),
+            }));
+        }
+        else if (pr.state === "display_pin") {
+            showModalHere(jsx(DFL.ConfirmModal, { bAlertDialog: true, strTitle: name, strDescription: T.btTypePin(pr.pin) }));
+        }
+        else if (pr.state === "done") {
+            toast(name + " · " + S.btPaired());
+            refresh();
+            closeModal();
+        }
+        else if (pr.state === "failed") {
+            toast(S.pairFailed() + (pr.status ? " (" + pr.status + ")" : ""));
+        }
+    };
+    const apply = (r, first) => {
+        if (!alive.current || !r) return;
+        setRes(Object.assign({}, r, { devices: stable(r.devices || []) }));
+        lastPairing.current = r.pairing || null;
+        onPairing(r.pairing, first);
+    };
+    const poll = async (first) => {
+        try { apply(await call(be.btScanResults), first); }
+        catch (e) { if (first) toast(errText(e)); }
+    };
+    const scan = async () => {
+        try { await call(be.btScan, true); }
+        catch (e) { toast(errText(e)); }
+        await poll(false);
+    };
+    useEffect(() => {
+        poll(true).then(scan);
+        const t = setInterval(() => poll(false), 1000);
+        return () => {
+            alive.current = false;
+            clearInterval(t);
+            call(be.btScan, false).catch(() => { });
+            // a prompt can't be answered once the dialog is gone, so a pairing in progress stops with it
+            if (lastPairing.current && PAIR_ACTIVE.has(lastPairing.current.state)) call(be.btPairCancel).catch(() => { });
+        };
+    }, []);
+    const pr = (res && res.pairing) || {};
+    const busy = PAIR_ACTIVE.has(pr.state);
+    const devices = ((res && res.devices) || []).filter((d) => !(pr.state === "done" && pr.id === d.id));
+    const pair = async (d) => {
+        if (busy) return;
+        handled.current = null;
+        try { apply(Object.assign({}, res, { pairing: await call(be.btPair, d.id) }), false); }
+        catch (e) { toast(errText(e)); }
+    };
+    const scanning = !res || res.scanning;
+    return jsxs(DFL.ModalRoot, {
+        closeModal, onCancel: closeModal,
+        children: [
+            jsx(DFL.DialogHeader, { children: S.btAvailable() }),
+            jsxs(DFL.DialogBody, {
+                children: [
+                    jsx(DFL.Focusable, {
+                        style: { display: "flex", flexDirection: "column" },
+                        children: devices.map((d) => {
+                            const mine = busy && pr.id === d.id;
+                            return jsx(DFL.Field, {
+                                label: d.name, icon: deviceIcon(d.type), description: mine ? T.btPairing : null,
+                                focusable: true, highlightOnFocus: true, disabled: busy && !mine,
+                                onActivate: () => pair(d), onClick: () => pair(d),
+                                children: mine ? jsx(DFL.Spinner, { style: { height: "1.2em" } }) : null,
+                            }, d.id);
+                        }),
+                    }),
+                    scanning && jsx(DFL.Field, { label: S.btSearching(), children: jsx(DFL.Spinner, { style: { height: "1.2em" } }) }),
+                    !scanning && devices.length === 0 && jsx(DFL.Field, { label: T.btNoneFound }),
+                ],
+            }),
+            jsx(DFL.DialogFooter, {
+                children: busy
+                    ? jsx(DFL.DialogButton, { onClick: () => call(be.btPairCancel).catch((e) => toast(errText(e))), children: S.btCancelPair() })
+                    : jsx(DFL.DialogButton, { onClick: scan, disabled: scanning, children: T.rescan }),
+            }),
+        ],
+    });
+}
+const addBtDevice = () => showModalHere(jsx(BtPairModal, {}));
 
 // ---------------------------------------------------------------- Performance tab: overlay level
 // Steam for Windows has a full performance monitor (detail levels, text size, contrast,

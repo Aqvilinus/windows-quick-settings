@@ -15,7 +15,8 @@ OmniConsole as the home app, and the Windows build of Decky Loader.
 - Wi-Fi network list with signal and security, connect / disconnect / forget, password entry with a show-password
   toggle, retry after a wrong password, internet status, and network sign-in pages (captive portals) through
   Steam's own "Log in to the network" dialog
-- Bluetooth devices: connect / disconnect audio devices, "Add Device" opens the Windows pairing page
+- Bluetooth devices: connect / disconnect audio devices, "Add Device" searches for and pairs new devices (with PIN
+  confirmation when the device asks for it), Y on a paired device forgets it
 - Brightness, output / input volume and audio device pickers
 - Night mode and HDR
 
@@ -44,8 +45,9 @@ The plugin's own Decky page is intentionally empty: everything lives in Steam's 
 ## How it works
 
 - `main.py` is the Decky backend entry point; `backend/winqs/` talks to Windows directly with `ctypes` (WLAN API,
-  Windows Runtime radios, Core Audio, DisplayConfig, Network List Manager, Intel IGCL, RTSS hooks API). No extra
-  Python packages are needed.
+  Windows Runtime radios, Core Audio, DisplayConfig, Network List Manager, Intel IGCL, RTSS hooks API) and, for
+  Bluetooth pairing, with [pywinrt](https://github.com/pywinrt/pywinrt), bundled in `py_modules/` with
+  `typing_extensions`.
 - `dist/index.js` is the frontend. It injects its sections into Steam's Quick Access Menu tabs and uses Steam's own
   components and localization strings wherever they exist.
 

@@ -7,7 +7,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 - OneXPlayer 3 (Core Ultra, Arc B390), Windows 11 in Xbox full-screen mode, home app OmniConsole. The panel is 1920x1200 with VRR, 30–144 Hz.
 - OneXConsole (vendor app, elevated) owns TDP, fans, buttons and its own RTSS OSD.
 - Decky Loader 3.3.0 for Windows, unelevated. Settings are in `%USERPROFILE%\homebrew\settings\windows-quick-settings`, logs in `homebrew\logs\windows-quick-settings`.
-- The backend runs on Decky's frozen Python 3.11: stdlib + `ctypes` only, no pip packages.
+- The backend runs on Decky's frozen Python 3.11 (no pip). Vendored libraries go in `py_modules/` (Decky adds it to `sys.path`): pywinrt (`winrt-runtime` + namespaces, cp311 win_amd64) and `typing_extensions`. Older modules use `ctypes` directly.
 - Steam CEF DevTools: `http://127.0.0.1:8080`. Decky runs in the `SharedJSContext` target.
 
 ## Layout
@@ -18,6 +18,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - `com.py`: COM/WinRT over ctypes, plus `init_worker` (MTA, EcoQoS off).
   - `radios.py`, `wlan.py`, `nlm.py`: radios; Wi-Fi scan, connect, forget; internet status.
   - `bt.py`, `btaudio.py`, `audio.py`: Bluetooth devices and audio.
+  - `btpair.py`: Bluetooth search, pairing and removal (WinRT via pywinrt, imported lazily).
   - `brightness.py`, `nightlight.py`, `hdr.py`, `display.py`, `battery.py`: brightness, Night light, HDR, the current refresh rate (read only), battery draw.
   - `rtss.py` + `../setup_rtss.ps1`, `framelimit.py`: frame limit through RTSS; Intel IGCL fallback.
   - `hotkeys.py`: Ctrl+1 / Ctrl+2 for Steam's side menus in games.
@@ -71,6 +72,10 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 - **Client settings:** `settingsStore.GetClientSetting(k)` returns `[value, setter]`; Steam mirrors writes back 0.03–3 s later.
 - Steam's Performance Monitor is native (`gameoverlayrenderer64.dll`) and can't be extended.
 - **CDP trap:** `connect(2, name)` from DevTools replaces the plugin's event listeners. Save and restore `DeckyPluginLoader.pluginEventListeners.get(name)`.
+- **Bluetooth pairing** (`btpair.py`, "Add Device" dialog, Y = Forget on paired rows):
+  - Search: DeviceWatchers over Windows' own `GetDeviceSelectorFromPairingState(False)` selectors (classic + LE), AEP kind; stops after 30 s or when the dialog closes.
+  - Pairing on its own thread with `DeviceInformationCustomPairing`: ConfirmOnly / DisplayPin accepted at once, ConfirmPinMatch answered later through the request's deferral. ProvidePin isn't supported.
+  - Steam on Windows has no Bluetooth API (`SteamClient.System.Bluetooth` is absent).
 - **WLAN:**
   - Error 5 means Location is off.
   - `retry_password` only for MSMSEC reasons (0x40000–0x4FFFF).
