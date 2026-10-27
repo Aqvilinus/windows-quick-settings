@@ -129,6 +129,12 @@ class Plugin:
     async def set_frame_limit(self, fps):
         return await self._call("set_frame_limit", lambda: self.svc.set_frame_limit(int(fps)), timeout=15)
 
+    async def set_active_game(self, appid):
+        return await self._call("set_active_game", lambda: self.svc.set_active_game(appid), timeout=15)
+
+    async def set_game_profile(self, on):
+        return await self._call("set_game_profile", lambda: self.svc.set_game_profile(bool(on)), timeout=15)
+
     # Ctrl+1 / Ctrl+2 (OneXConsole D-pad + M1) while a game runs: see backend/winqs/hotkeys.py
     def _on_hotkey(self, menu, overlay_pid=None):
         emit = getattr(decky, "emit", None)

@@ -81,6 +81,11 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - OneXConsole writes the same limit and kills RTSS when its OSD is turned off; `rtss_keepalive()` restarts it.
   - Keep RTSS's D3D12 OSD renderer enabled.
 - **Intel IGCL** fallback: DX9/DX11 only. It is set to 0 whenever RTSS is active.
+- **Per-game profiles** (Steam Deck's "Use per-game profile"):
+  - `state.json` `frame_profiles` = `{default: {fps, last}, games: {appid: {fps, last}}}`. Turning a game's profile on copies the current settings into it; turning it off deletes it.
+  - The frontend sends `SteamUIStore.MainRunningAppID` to `set_active_game` on change (MobX reaction) and every 30 s while a game runs.
+  - A switch applies the limit only if the old or the new context has a game profile, so a limit set elsewhere (OneXConsole) isn't undone between two default contexts.
+  - The heading ("Performance Settings ⓘ" / "Using default profile" / "Using <game> profile") is Steam Deck's markup with Steam's classes (`PerfProfileInfo`, `SubHeading`…), the `Information` icon and Steam's app icon component. Steam's own Deck components read a SteamOS-only profile store and can't be used.
 
 ## Testing
 

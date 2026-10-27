@@ -26,6 +26,7 @@ OmniConsole as the home app, and the Windows build of Decky Loader.
 - Projected charging time in Steam's battery block (Windows gives Steam none, so it shows "?h ?m")
 - Frame Limit toggle with an FPS slider, through RivaTuner Statistics Server (all graphics APIs) or, without RTSS,
   the Intel graphics driver limiter (DX9 / DX11 only)
+- "Use per-game profile", like on Steam Deck: a game can keep its own frame limit, applied while it runs
 
 **In games:** Steam's left and right side menus open with Ctrl+1 / Ctrl+2 (for example mapped to D-pad + M1 in
 OneXConsole) even while the game has focus.

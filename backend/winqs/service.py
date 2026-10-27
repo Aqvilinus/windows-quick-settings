@@ -30,6 +30,7 @@ class SystemService:
         self._frames = IntelFrameLimit()  # used on the worker thread only
         self._rtss = RtssFrameLimit()       # DX12 / Vulkan too, once backend/setup_rtss.ps1 has run
         self._intel_cleared = False
+        self._game = None  # Steam appid of the running game (str), as the frontend reports it
 
     # ---- infrastructure -------------------------------------------------------------
     def submit(self, fn, *args):
@@ -346,7 +347,13 @@ class SystemService:
                 self._rtss.ensure_running()  # RTSS was closed: the limit only works while it runs
         except Exception as e:  # noqa: BLE001
             out["frame_limit"] = {"supported": False, "fps": 0, "min": 30, "max": 300, "error": str(e)}
-        out["last_frame_limit"] = self._load().get("last_frame_limit")
+        data = self._load()
+        fresh = "frame_profiles" not in data
+        prof, per_game = self._active_profile(data)
+        if fresh:
+            self._save(data)
+        out["last_frame_limit"] = prof.get("last")
+        out["profile"] = {"game": self._game, "per_game": per_game}
         return out
 
     @staticmethod
@@ -397,13 +404,73 @@ class SystemService:
         return battery.state()
 
     def set_frame_limit(self, fps):
-        """fps 0 = no limit. The refresh rate is left alone: the panel has VRR and follows the game."""
+        """fps 0 = no limit, stored in the active profile. The refresh rate is left alone: the panel has VRR."""
         result = self._limiter().set(fps)
+        data = self._load()
+        prof, _ = self._active_profile(data)
+        prof["fps"] = int(fps)
         if fps and fps > 0:
-            data = self._load()
-            data["last_frame_limit"] = int(fps)
-            self._save(data)
+            prof["last"] = int(fps)
+        self._save(data)
         return result
+
+    # ---- frame limit profiles: default + per game, like Steam Deck's "Use per-game profile" ------------------
+    def _active_profile(self, data):
+        """(profile dict, per_game) for the running game; creates the store on first use from the current limit."""
+        store = data.get("frame_profiles")
+        if not isinstance(store, dict) or not isinstance(store.get("default"), dict):
+            try:
+                fps = int(self._limiter().get().get("fps") or 0)
+            except Exception:  # noqa: BLE001 - no limiter: start without a limit
+                fps = 0
+            store = {"default": {"fps": fps, "last": data.pop("last_frame_limit", None)}, "games": {}}
+            data["frame_profiles"] = store
+        games = store.setdefault("games", {})
+        if self._game and isinstance(games.get(self._game), dict):
+            return games[self._game], True
+        return store["default"], False
+
+    def set_active_game(self, appid):
+        """The running game changed (None = no game). Its profile (or the default one) is applied when either side
+        has a per-game profile; between two default contexts the limit is left alone, so a limit set elsewhere
+        (OneXConsole) is not undone. Idempotent: the frontend also resends it as a heartbeat."""
+        game = str(appid) if appid not in (None, "", 0, "0") else None
+        if game == self._game:
+            return {"game": game}
+        data = self._load()
+        _, was_per_game = self._active_profile(data)
+        self._game = game
+        prof, per_game = self._active_profile(data)
+        self._save(data)
+        if was_per_game or per_game:
+            self._apply_fps(int(prof.get("fps") or 0))
+        return {"game": game, "per_game": per_game}
+
+    def set_game_profile(self, on):
+        """Turn the per-game profile of the running game on (starting as a copy of the current settings) or off
+        (deleted; the default profile applies again)."""
+        if not self._game:
+            raise ValueError("no game is running")
+        data = self._load()
+        cur, per_game = self._active_profile(data)
+        games = data["frame_profiles"]["games"]
+        if on and not per_game:
+            games[self._game] = {"fps": int(cur.get("fps") or 0), "last": cur.get("last")}
+        elif not on and per_game:
+            games.pop(self._game, None)
+            prof, _ = self._active_profile(data)
+            self._apply_fps(int(prof.get("fps") or 0))
+        self._save(data)
+        return {"game": self._game, "per_game": bool(on)}
+
+    def _apply_fps(self, fps):
+        lim = self._limiter()
+        try:
+            if int(lim.get().get("fps") or 0) == fps:
+                return
+        except Exception:  # noqa: BLE001 - set() below reports the real error
+            pass
+        lim.set(fps)
 
     # ---- misc ----------------------------------------------------------------------------
     @staticmethod
