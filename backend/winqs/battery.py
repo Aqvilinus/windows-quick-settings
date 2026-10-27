@@ -1,20 +1,12 @@
-"""Battery charge / discharge rate, as Windows reports it (CallNtPowerInformation SystemBatteryState, no admin)."""
-import ctypes
+"""Battery charge / discharge rate and the estimated time to full: WinRT Windows.Devices.Power (pywinrt), no admin.
+
+Battery.AggregateBattery combines all batteries the way the Windows battery icon does. Its report gives the rate
+(mW; positive while charging, negative while discharging) and the capacities (mWh).
+"""
 import math
-from ctypes import byref, sizeof, wintypes
 
-_powrprof = ctypes.WinDLL("powrprof")
-_powrprof.CallNtPowerInformation.argtypes = [ctypes.c_int, ctypes.c_void_p, wintypes.ULONG, ctypes.c_void_p, wintypes.ULONG]
-_powrprof.CallNtPowerInformation.restype = ctypes.c_long
-SystemBatteryState = 5
-
-
-class SYSTEM_BATTERY_STATE(ctypes.Structure):
-    _fields_ = [("AcOnLine", ctypes.c_ubyte), ("BatteryPresent", ctypes.c_ubyte), ("Charging", ctypes.c_ubyte),
-                ("Discharging", ctypes.c_ubyte), ("Spare1", ctypes.c_ubyte * 3), ("Tag", ctypes.c_ubyte),
-                ("MaxCapacity", wintypes.ULONG), ("RemainingCapacity", wintypes.ULONG), ("Rate", ctypes.c_int32),
-                ("EstimatedTime", wintypes.ULONG), ("DefaultAlert1", wintypes.ULONG), ("DefaultAlert2", wintypes.ULONG)]
-
+from winrt.windows.devices.power import Battery
+from winrt.windows.system.power import BatteryStatus, PowerManager, PowerSupplyStatus
 
 CV_KNEE = 0.8      # Li-ion: about constant power up to ~80 % (CC), then constant voltage (CV) with a falling current
 CV_END = 0.05      # the charger stops when the power falls to about C/20
@@ -50,15 +42,17 @@ def state():
     charge (Windows reports none, so Steam shows "?h ?m"), None when not charging.
     """
     global _rate_avg
-    s = SYSTEM_BATTERY_STATE()
-    if _powrprof.CallNtPowerInformation(SystemBatteryState, None, 0, byref(s), sizeof(s)) != 0:
-        return None
-    rate = s.Rate  # mW, negative while discharging
-    watts = None if rate in (0, -0x80000000) else round(-rate / 1000.0, 1)
-    full = None
-    if s.Charging and rate > 0 and s.MaxCapacity > s.RemainingCapacity:
-        full = _time_to_full(s.MaxCapacity, s.RemainingCapacity, rate)
+    report = Battery.aggregate_battery.get_report()
+    status = report.status
+    rate = report.charge_rate_in_milliwatts  # None when unknown
+    full, now = report.full_charge_capacity_in_milliwatt_hours, report.remaining_capacity_in_milliwatt_hours
+    charging = status == BatteryStatus.CHARGING
+    watts = round(-rate / 1000.0, 1) if rate else None
+    full_seconds = None
+    if charging and rate and rate > 0 and full and now is not None and full > now:
+        full_seconds = _time_to_full(full, now, rate)
     else:
         _rate_avg = None
-    return {"present": bool(s.BatteryPresent), "ac": bool(s.AcOnLine), "charging": bool(s.Charging), "watts": watts,
-            "full_seconds": full}
+    return {"present": status != BatteryStatus.NOT_PRESENT,
+            "ac": PowerManager.power_supply_status != PowerSupplyStatus.NOT_PRESENT,
+            "charging": charging, "watts": watts, "full_seconds": full_seconds}

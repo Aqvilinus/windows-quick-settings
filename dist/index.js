@@ -792,7 +792,7 @@ function forgetBtDevice(d) {
         strTitle: d.name, strDescription: T.btForgetQ, strOKButtonText: S.btForgetDevice(),
         onOK: async () => {
             try {
-                await call(be.btForget, d.address);
+                await call(be.btForget, d.id);
                 toast(T.btForgotten);
             }
             catch (e) { toast(errText(e)); }
@@ -809,7 +809,7 @@ async function openSettingsPage(page) {
     catch (e) { toast(errText(e)); }
 }
 // ---------------------------------------------------------------- Bluetooth pairing ("Add Device")
-// Search and pairing run in the backend (WinRT, btpair.py); the dialog polls their state. Steam's own strings where
+// Search and pairing run in the backend (WinRT, bt.py); the dialog polls their state. Steam's own strings where
 // Steam has them (Available to pair, Searching for devices..., Pair, Cancel Pairing, Paired).
 const PAIR_ACTIVE = new Set(["pairing", "confirm", "display_pin"]);
 function BtPairModal({ closeModal }) {

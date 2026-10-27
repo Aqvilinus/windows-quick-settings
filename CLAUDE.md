@@ -18,9 +18,9 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - `com.py`: COM over ctypes, plus `init_worker` (MTA, EcoQoS off). WinRT goes through pywinrt.
   - `radios.py`, `nlm.py` (pywinrt): radio on/off (`Windows.Devices.Radios`); internet status (`NetworkConnectivityLevel`).
   - `wlan.py` (Native Wifi API over ctypes): Wi-Fi scan, connect, forget. WinRT can't delete profiles, so it stays.
-  - `bt.py`, `btaudio.py`, `audio.py`: Bluetooth devices and audio.
-  - `btpair.py`: Bluetooth search, pairing and removal (WinRT via pywinrt, imported lazily).
-  - `brightness.py`, `nightlight.py`, `hdr.py`, `display.py`, `battery.py`: brightness, Night light, HDR, the current refresh rate (read only), battery draw.
+  - `bt.py` (pywinrt): Bluetooth paired list (watchers kept running), search, pairing, removal.
+  - `btaudio.py`, `audio.py` (Core Audio over ctypes; WinRT has no endpoint volume / default device / BT audio connect).
+  - `brightness.py`, `nightlight.py`, `hdr.py`, `display.py`, `battery.py`: brightness, Night light, HDR, the current refresh rate (read only, the Frame Limit slider's top), battery (`Windows.Devices.Power`, pywinrt).
   - `rtss.py` + `../setup_rtss.ps1`, `framelimit.py`: frame limit through RTSS; Intel IGCL fallback.
   - `hotkeys.py`: Ctrl+1 / Ctrl+2 for Steam's side menus in games.
 - `dist/index.js`: the whole frontend, hand-written, no build step, split by `// ------` banners.
@@ -72,8 +72,10 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - Test with `SetFakeLocalSystemState(2)` and reset to 0.
 - **Client settings:** `settingsStore.GetClientSetting(k)` returns `[value, setter]`; Steam mirrors writes back 0.03–3 s later.
 - Steam's Performance Monitor is native (`gameoverlayrenderer64.dll`) and can't be extended.
+- **Checked dead ends** (2026-10-28): Steam's `SteamClient.System.Display.SetBrightness` reports success on Windows but doesn't change the panel; `BrightnessOverride.GetDefaultForSystem` fails unpackaged; WinRT has no HDR toggle, no endpoint volume / default audio device, no Wi-Fi profile removal. pywinrt can't call classic COM, so `audio.py`, `btaudio.py`, `brightness.py`, `hdr.py`, `wlan.py` stay on ctypes.
 - **CDP trap:** `connect(2, name)` from DevTools replaces the plugin's event listeners. Save and restore `DeckyPluginLoader.pluginEventListeners.get(name)`.
-- **Bluetooth pairing** (`btpair.py`, "Add Device" dialog, Y = Forget on paired rows):
+- **Bluetooth** (`bt.py`, "Add Device" dialog, Y = Forget on paired rows, by endpoint id):
+  - Paired list: DeviceWatchers over the "paired" selectors with `System.Devices.Aep.IsConnected`, kept running; a poll reads the snapshot (0 ms). It includes LE devices.
   - Search: DeviceWatchers over Windows' own `GetDeviceSelectorFromPairingState(False)` selectors (classic + LE), AEP kind; stops after 30 s or when the dialog closes.
   - Pairing on its own thread with `DeviceInformationCustomPairing`: ConfirmOnly / DisplayPin accepted at once, ConfirmPinMatch answered later through the request's deferral. ProvidePin isn't supported.
   - Steam on Windows has no Bluetooth API (`SteamClient.System.Bluetooth` is absent).

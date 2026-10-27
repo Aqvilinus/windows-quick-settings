@@ -31,7 +31,9 @@ class SystemService:
         self._rtss = RtssFrameLimit()       # DX12 / Vulkan too, once backend/setup_rtss.ps1 has run
         self._intel_cleared = False
         self._game = None  # Steam appid of the running game (str), as the frontend reports it
-        self._btpair = None  # (module, Scanner, Pairing) once Bluetooth pairing is used
+        self._bt_paired = bt.PairedDevices(self.log)  # kept current by Windows once first read
+        self._bt_scan = bt.Scanner(self.log)
+        self._bt_pairing = bt.Pairing(self.log)
 
     # ---- infrastructure -------------------------------------------------------------
     def submit(self, fn, *args):
@@ -293,7 +295,7 @@ class SystemService:
 
     # ---- Bluetooth -------------------------------------------------------------------
     def bluetooth_devices(self):
-        devices = bt.paired_devices()
+        devices = self._bt_paired.devices()
         try:
             audio = {a["name"]: a for a in btaudio.list_audio_devices()}
         except Exception as e:  # noqa: BLE001
@@ -310,50 +312,37 @@ class SystemService:
         btaudio.set_connected(name, connect)
         return True
 
-    # ---- Bluetooth search / pairing / removal (WinRT through pywinrt, see btpair.py) ---------------------------------
-    def _bt(self):
-        """(scanner, pairing), created on first use: pywinrt is only loaded when Bluetooth pairing is used."""
-        if self._btpair is None:
-            from . import btpair
-            self._btpair = (btpair, btpair.Scanner(self.log), btpair.Pairing(self.log))
-        return self._btpair
-
+    # ---- Bluetooth search / pairing / removal (see bt.py) ----------------------------------------------------------
     def bt_scan(self, on):
-        _, scanner, _ = self._bt()
         if on:
-            scanner.start()
+            self._bt_scan.start()
         else:
-            scanner.stop()
-        return scanner.results()
+            self._bt_scan.stop()
+        return self._bt_scan.results()
 
     def bt_scan_results(self):
-        _, scanner, pairing = self._bt()
-        out = scanner.results()
-        out["pairing"] = pairing.state()
+        out = self._bt_scan.results()
+        out["pairing"] = self._bt_pairing.state()
         return out
 
     def bt_pair(self, device_id):
-        mod, scanner, pairing = self._bt()
-        if not mod.is_device_id(device_id):
+        if not bt.is_device_id(device_id):
             raise ValueError("not a Bluetooth device id")
-        scanner.stop()  # an inquiry running alongside slows pairing down
-        pairing.start(device_id)
-        return pairing.state()
+        self._bt_scan.stop()  # an inquiry running alongside slows pairing down
+        self._bt_pairing.start(device_id)
+        return self._bt_pairing.state()
 
     def bt_pair_answer(self, accept):
-        _, _, pairing = self._bt()
-        return pairing.answer(bool(accept))
+        return self._bt_pairing.answer(bool(accept))
 
     def bt_pair_cancel(self):
-        _, _, pairing = self._bt()
-        pairing.cancel()
-        return pairing.state()
+        self._bt_pairing.cancel()
+        return self._bt_pairing.state()
 
-    def bt_forget(self, address):
-        mod, _, _ = self._bt()
-        if not isinstance(address, str) or len(address) != 12 or any(c not in "0123456789ABCDEFabcdef" for c in address):
-            raise ValueError("not a Bluetooth address")
-        return mod.unpair(address)
+    def bt_forget(self, device_id):
+        if not bt.is_device_id(device_id):
+            raise ValueError("not a Bluetooth device id")
+        return bt.unpair(device_id)
 
     # ---- brightness / audio -----------------------------------------------------------
     def set_brightness(self, value):

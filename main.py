@@ -129,8 +129,8 @@ class Plugin:
     async def bt_pair_cancel(self):
         return await self._call("bt_pair_cancel", lambda: self.svc.bt_pair_cancel(), timeout=10)
 
-    async def bt_forget(self, address):
-        return await self._call("bt_forget", lambda: self.svc.bt_forget(str(address)), timeout=20)
+    async def bt_forget(self, device_id):
+        return await self._call("bt_forget", lambda: self.svc.bt_forget(str(device_id)), timeout=20)
 
     async def perf_state(self):
         return await self._call("perf_state", lambda: self.svc.perf_state(), timeout=10)
