@@ -1,12 +1,11 @@
-"""Minimal COM / WinRT helpers on top of ctypes (no comtypes, no pywinrt).
+"""Minimal COM helpers on top of ctypes (WinRT goes through pywinrt in py_modules).
 
 All COM interface calls go through `vcall`, which invokes a method by its vtable
 index. Every caller documents the index it relies on.
 """
 import ctypes
-import time
 import uuid
-from ctypes import POINTER, byref, c_int32, c_long, c_uint32, c_ulong, c_void_p, wintypes
+from ctypes import POINTER, byref, c_int32, c_long, c_ulong, c_void_p, wintypes
 
 
 class GUID(ctypes.Structure):
@@ -74,14 +73,6 @@ _ole32.PropVariantClear.restype = c_long
 
 _combase.RoInitialize.argtypes = [c_int32]
 _combase.RoInitialize.restype = c_long
-_combase.WindowsCreateString.argtypes = [wintypes.LPCWSTR, c_uint32, POINTER(c_void_p)]
-_combase.WindowsCreateString.restype = c_long
-_combase.WindowsDeleteString.argtypes = [c_void_p]
-_combase.WindowsDeleteString.restype = c_long
-_combase.WindowsGetStringRawBuffer.argtypes = [c_void_p, POINTER(c_uint32)]
-_combase.WindowsGetStringRawBuffer.restype = wintypes.LPCWSTR
-_combase.RoGetActivationFactory.argtypes = [c_void_p, POINTER(GUID), POINTER(c_void_p)]
-_combase.RoGetActivationFactory.restype = c_long
 
 RPC_E_CHANGED_MODE = -2147417850  # 0x80010106
 
@@ -126,77 +117,3 @@ def co_create(clsid_text, iid_text, ctx=23):  # CLSCTX_ALL
 
 def propvariant_clear(buf):
     _ole32.PropVariantClear(buf)
-
-
-class HString:
-    def __init__(self, text):
-        self.h = c_void_p()
-        check(_combase.WindowsCreateString(text, len(text), byref(self.h)), "WindowsCreateString")
-
-    def __enter__(self):
-        return self.h
-
-    def __exit__(self, *exc):
-        _combase.WindowsDeleteString(self.h)
-
-
-def hstring_to_str(h):
-    if not h:
-        return ""
-    n = c_uint32()
-    s = _combase.WindowsGetStringRawBuffer(h, byref(n)) or ""
-    _combase.WindowsDeleteString(h)
-    return s
-
-
-def activation_factory(class_name, iid_text):
-    out = c_void_p()
-    iid = GUID.of(iid_text)
-    with HString(class_name) as h:
-        check(_combase.RoGetActivationFactory(h, byref(iid), byref(out)), "RoGetActivationFactory(%s)" % class_name)
-    return out
-
-
-IID_IAsyncInfo = "00000036-0000-0000-C000-000000000046"
-
-
-def await_async(op, timeout=20.0):
-    """Block until a WinRT IAsyncOperation/IAsyncAction finishes.
-
-    IAsyncInfo vtable: 0-5 IInspectable, 6 get_Id, 7 get_Status, 8 get_ErrorCode.
-    AsyncStatus: 0 Started, 1 Completed, 2 Canceled, 3 Error.
-    """
-    info = qi(op, IID_IAsyncInfo)
-    try:
-        deadline = time.monotonic() + timeout
-        status = c_int32()
-        delay = 0.002  # quick operations finish within a few ms; slow ones (radio switch ~1-2 s) back off to 50 ms
-        while True:
-            check(vcall(info, 7, [POINTER(c_int32)], byref(status)), "IAsyncInfo.get_Status")
-            if status.value == 1:
-                return
-            if status.value == 3:
-                code = c_long()
-                vcall(info, 8, [POINTER(c_long)], byref(code))
-                raise ComError(code.value, "async operation")
-            if status.value == 2:
-                raise RuntimeError("async operation canceled")
-            if time.monotonic() > deadline:
-                raise TimeoutError("async operation timed out")
-            time.sleep(delay)
-            delay = min(delay * 1.5, 0.05)
-    finally:
-        release(info)
-
-
-def async_result_int(op):
-    """IAsyncOperation<enum/int>: vtable 8 = GetResults(out int)."""
-    r = c_int32()
-    check(vcall(op, 8, [POINTER(c_int32)], byref(r)), "IAsyncOperation.GetResults")
-    return r.value
-
-
-def async_result_ptr(op):
-    r = c_void_p()
-    check(vcall(op, 8, [POINTER(c_void_p)], byref(r)), "IAsyncOperation.GetResults")
-    return r

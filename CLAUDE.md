@@ -15,8 +15,9 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 - `main.py`: backend entry. `Plugin` methods are the callables, run on one worker thread via `_call`.
 - `backend/winqs/`:
   - `service.py`: `state()` for the Quick Settings tab, `perf_state()` for the Performance tab, all actions.
-  - `com.py`: COM/WinRT over ctypes, plus `init_worker` (MTA, EcoQoS off).
-  - `radios.py`, `wlan.py`, `nlm.py`: radios; Wi-Fi scan, connect, forget; internet status.
+  - `com.py`: COM over ctypes, plus `init_worker` (MTA, EcoQoS off). WinRT goes through pywinrt.
+  - `radios.py`, `nlm.py` (pywinrt): radio on/off (`Windows.Devices.Radios`); internet status (`NetworkConnectivityLevel`).
+  - `wlan.py` (Native Wifi API over ctypes): Wi-Fi scan, connect, forget. WinRT can't delete profiles, so it stays.
   - `bt.py`, `btaudio.py`, `audio.py`: Bluetooth devices and audio.
   - `btpair.py`: Bluetooth search, pairing and removal (WinRT via pywinrt, imported lazily).
   - `brightness.py`, `nightlight.py`, `hdr.py`, `display.py`, `battery.py`: brightness, Night light, HDR, the current refresh rate (read only), battery draw.
@@ -37,7 +38,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - CDP key events bypass gamepad routing and prove nothing.
 - Diagnostics: `window.__WINQS.status`, `.openWifi()`, `.stop()`.
 - Never `Page.captureScreenshot` a hidden Steam page: it hangs. Big Picture is hidden whenever a game or another window is in front.
-- Performance budget: `get_state` ~15–20 ms, idle CPU 0.
+- Performance budget: `get_state` ~8 ms warm, idle CPU 0.
 
 ## Rules
 
@@ -65,7 +66,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 - **Overlay Settings:** Y on "Performance Overlay Level" opens the plugin's dialog (position, text size, contrast, opacity, graphs). The owner wants it; keep it.
 - **Passwords:** Steam `TextField` stays `type=text`; mask with `-webkit-text-security: disc`.
 - **Captive portals:**
-  - Steam's probe via `SteamClient.System.Network.RegisterForConnectivityTestChanges` (result 2, `strCaptivePortalURL`), plus NLM WEBHIJACK.
+  - Steam's probe via `SteamClient.System.Network.RegisterForConnectivityTestChanges` (result 2, `strCaptivePortalURL`), plus Windows' own `ConstrainedInternetAccess` connectivity level.
   - Open Steam's own login dialog: a `findModuleExport` function containing `strManualCaptivePortalURL`.
   - Steam's Chromium HTTPS-upgrades `http://` URLs.
   - Test with `SetFakeLocalSystemState(2)` and reset to 0.
