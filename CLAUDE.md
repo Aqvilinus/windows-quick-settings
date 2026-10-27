@@ -60,6 +60,8 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - Any mismatch leaves that part as Steam renders it.
 - **Read-only rows** must not be focusable (`DFL.Field` always is; an empty nav node breaks navigation). Use `DFL.gamepadDialogClasses` markup. CSS hiding doesn't remove an element from navigation.
 - **Dialogs:** use `showModalHere()` (active nav context's root window). `DFL.showModal` opens behind the game.
+- **Footer hints:** the QAM footer is ~350 px wide. A long `onOptionsActionDescription` wraps Steam's own hint ("Adjust slider") onto a second row, so use short Steam tokens (`L("Settings")`).
+- **Overlay Settings:** Y on "Performance Overlay Level" opens the plugin's dialog (position, text size, contrast, opacity, graphs). The owner wants it; keep it.
 - **Passwords:** Steam `TextField` stays `type=text`; mask with `-webkit-text-security: disc`.
 - **Captive portals:**
   - Steam's probe via `SteamClient.System.Network.RegisterForConnectivityTestChanges` (result 2, `strCaptivePortalURL`), plus NLM WEBHIJACK.

@@ -94,6 +94,7 @@ const T = IS_RU ? {
     rtssSetupHint: "Сейчас работает лимит драйвера Intel, в DX12-играх он не действует. Нажмите, чтобы один раз настроить RTSS: Windows попросит разрешение администратора",
     rtssMissing: "Лимит драйвера Intel не действует в DX12-играх. Чтобы ограничивать все игры, установите RTSS",
     rtssConfirm: "Подтвердите запрос Windows", rtssWorking: "Настраивается…",
+    overlayPosition: "Положение",
 } : {
     loading: "Loading…", saved: "Saved", open: "Open", scanning: "Searching for networks…", rescan: "Refresh",
     password: "Password", chooseNetwork: "Choose network", devices: "Devices", notConnected: "Not connected",
@@ -114,6 +115,7 @@ const T = IS_RU ? {
     rtssSetupHint: "The Intel driver limit is in use and does not apply to DX12 games. Press to set up RTSS once: Windows will ask for administrator permission",
     rtssMissing: "The Intel driver limit does not apply to DX12 games. Install RTSS to limit every game",
     rtssConfirm: "Confirm the Windows prompt", rtssWorking: "Setting up…",
+    overlayPosition: "Position",
 };
 const S = {
     airplane: () => L("QuickAccess_Tab_Settings_Section_Shortcuts_AirplaneMode", "Airplane mode"),
@@ -776,6 +778,11 @@ const addBtDevice = () => openSettingsPage("bluetooth");
 const PERF_KEYS = {
     corner: "overlay_fps_counter_corner",          // 0 = off, 1..4 = corner
     level: "overlay_fps_counter_detail_level",     // 1..4
+    scale: "overlay_fps_counter_scale_factor",     // 0.2..1.4
+    saturation: "overlay_fps_counter_saturation_factor", // 0..1
+    opacity: "overlay_fps_counter_bgopacity",      // 0..1
+    fpsGraph: "overlay_fps_counter_fps_graph",
+    cpuGraph: "overlay_fps_counter_cpu_graph",
 };
 function getClientSetting(k) {
     try { return window.settingsStore.GetClientSetting(k)[0]; }
@@ -819,6 +826,7 @@ function readPerf() {
     for (const [name, key] of Object.entries(PERF_KEYS)) o[name] = readPerfKey(key);
     return o;
 }
+const round1 = (v) => Math.round(Number(v) * 10) / 10;
 let lastPerfCorner = 2;
 function perfLevelNames() {
     return [
@@ -995,6 +1003,58 @@ function usePerf(active) {
     }, [active]);
     return [p, setP];
 }
+// The overlay's look and position: the gamepad Options button on the level slider opens it.
+function OverlaySettingsModal({ closeModal }) {
+    const [p, setP] = usePerf(true);
+    const level = p.corner > 0 ? Math.max(1, Math.min(4, p.level || 1)) : 0;
+    const setVal = (name, v) => { setClientSetting(PERF_KEYS[name], v); setP(readPerf()); };
+    const corner = p.corner > 0 ? p.corner : lastPerfCorner;
+    const slider = (name, label, min, max) => jsx(DFL.SliderField, {
+        label, value: round1(p[name] ?? min), min, max, step: 0.1, showValue: false, layout: "below",
+        onChange: (v) => setVal(name, round1(v)),
+    }, name);
+    return jsxs(DFL.ModalRoot, {
+        closeModal, onCancel: closeModal,
+        children: [
+            jsx(DFL.DialogHeader, { children: L("QuickAccess_Tab_Perf_Overlay", "Performance Overlay") }),
+            jsxs(DFL.DialogBody, {
+                children: [
+                    jsx(DFL.DropdownItem, {
+                        label: T.overlayPosition,
+                        rgOptions: [
+                            { data: 1, label: L("QuickAccess_Tab_Perf_FPS_Corner_TopLeft", "Top Left") },
+                            { data: 2, label: L("QuickAccess_Tab_Perf_FPS_Corner_TopRight", "Top Right") },
+                            { data: 4, label: L("QuickAccess_Tab_Perf_FPS_Corner_BottomLeft", "Bottom Left") },
+                            { data: 3, label: L("QuickAccess_Tab_Perf_FPS_Corner_BottomRight", "Bottom Right") },
+                        ],
+                        selectedOption: corner,
+                        onChange: (o) => {
+                            if (!o) return;
+                            lastPerfCorner = o.data;
+                            if (p.corner > 0) setVal("corner", o.data); // while the overlay is off, used when it is turned on
+                            else setP(Object.assign({}, p));
+                        },
+                    }, "position"),
+                    slider("scale", L("Settings_InGame_PerfOverlay_TextSize", "Text size scaling"), 0.2, 1.4),
+                    slider("saturation", L("Settings_InGame_PerfOverlay_Saturation", "Text contrast/saturation"), 0, 1),
+                    slider("opacity", L("Settings_InGame_PerfOverlay_BGOpacity", "Background opacity"), 0, 1),
+                    level > 1 && jsx(DFL.ToggleField, {
+                        label: L("Settings_InGame_PerfOverlayShowFPSGraph", "Show FPS Avg/Min Graph"), checked: !!p.fpsGraph,
+                        onChange: (v) => setVal("fpsGraph", v),
+                    }, "fpsGraph"),
+                    level > 2 && jsx(DFL.ToggleField, {
+                        label: L("Settings_InGame_PerfOverlayShowCPUGraph", "Show CPU Utilization Per-Core Graph"), checked: !!p.cpuGraph,
+                        onChange: (v) => setVal("cpuGraph", v),
+                    }, "cpuGraph"),
+                ],
+            }),
+            jsx(DFL.DialogFooter, {
+                children: jsx(DFL.DialogButton, { onClick: closeModal, children: L("Button_Close", "Close") }),
+            }),
+        ],
+    });
+}
+function openOverlaySettings() { showModalHere(jsx(OverlaySettingsModal, {})); }
 function PerfSection({ active }) {
     const [p, setP] = usePerf(active);
     if (p.corner === undefined) return null;
@@ -1019,6 +1079,9 @@ function PerfSection({ active }) {
             value: level, min: 0, max: 4, step: 1, layout: "below",
             notchCount: 5, notchLabels: notches, notchTicksVisible: false, showValue: false,
             onChange: setLevel,
+            // Steam's short "Settings" label: the QAM footer is narrow, and a longer hint wraps Steam's own
+            // "Adjust slider" hint onto a second row
+            onOptionsButton: openOverlaySettings, onOptionsActionDescription: L("Settings", "Settings"),
         }), "level"),
     });
 }
