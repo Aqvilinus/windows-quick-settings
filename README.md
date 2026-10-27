@@ -23,7 +23,7 @@ OmniConsole as the home app, and the Windows build of Decky Loader.
 
 - Performance Overlay Level slider (Steam's performance monitor), with Steam's duplicate FPS corner / contrast rows
   removed
-- Live battery power draw under Steam's battery row
+- Projected charging time in Steam's battery block (Windows gives Steam none, so it shows "?h ?m")
 - Frame Limit toggle with an FPS slider, through RivaTuner Statistics Server (all graphics APIs) or, without RTSS,
   the Intel graphics driver limiter (DX9 / DX11 only)
 

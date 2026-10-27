@@ -53,9 +53,11 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - Decky TabsHook technique (afterPatch + tree patcher).
   - Steam's tab objects are never mutated, wrappers are tagged `Symbol.for("winqs.qam-wrapper")`, and unload restores the fibers.
   - Sections reappear on the next QAM open after a reload.
-- **Steam's FPS rows:** the Windows Performance panel is `G() → H() → [M battery, Q FPS rows]`, all plain `function(){return jsx}`.
-  - `withoutSteamFpsRows()` expands them and replaces `Q` (identified by its `QuickAccess_Tab_Perf_FPS_*` row components) with the power row.
-  - Any mismatch renders Steam's panel untouched.
+- **Steam's Performance panel:** `G() → H() → [M battery, Q FPS rows]`. G, H and Q are plain `function(){return jsx}`; M and its time column B have hooks.
+  - `patchSteamPerfPanel()` expands G/H, drops `Q` (identified by its `QuickAccess_Tab_Perf_FPS_*` row components) and wraps M.
+  - The wrappers call Steam's M / B (found by `BatterySectionContainer` / `BatteryProjectedValue` in their source). Steam's look is kept as is.
+  - While charging Windows gives Steam no time to full, so B shows "?h ?m". Only that is replaced, in Steam's `%1$sh %2$sm` format, with `full_seconds` from `battery.py`: smoothed rate, constant power to 80 %, then an exponential CV taper until C/20.
+  - Any mismatch leaves that part as Steam renders it.
 - **Read-only rows** must not be focusable (`DFL.Field` always is; an empty nav node breaks navigation). Use `DFL.gamepadDialogClasses` markup. CSS hiding doesn't remove an element from navigation.
 - **Dialogs:** use `showModalHere()` (active nav context's root window). `DFL.showModal` opens behind the game.
 - **Passwords:** Steam `TextField` stays `type=text`; mask with `-webkit-text-security: disc`.

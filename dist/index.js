@@ -91,7 +91,7 @@ const T = IS_RU ? {
     rtssSetup: "Лимит FPS во всех играх",
     rtssSetupHint: "Сейчас работает лимит драйвера Intel, в DX12-играх он не действует. Нажмите, чтобы один раз настроить RTSS: Windows попросит разрешение администратора",
     rtssMissing: "Лимит драйвера Intel не действует в DX12-играх. Чтобы ограничивать все игры, установите RTSS",
-    rtssConfirm: "Подтвердите запрос Windows", rtssWorking: "Настраивается…", powerDraw: "Расход энергии", charging: "заряжается",
+    rtssConfirm: "Подтвердите запрос Windows", rtssWorking: "Настраивается…",
 } : {
     loading: "Loading…", saved: "Saved", open: "Open", scanning: "Searching for networks…", rescan: "Refresh",
     password: "Password", chooseNetwork: "Choose network", devices: "Devices", notConnected: "Not connected",
@@ -111,7 +111,7 @@ const T = IS_RU ? {
     rtssSetup: "Frame limit in all games",
     rtssSetupHint: "The Intel driver limit is in use and does not apply to DX12 games. Press to set up RTSS once: Windows will ask for administrator permission",
     rtssMissing: "The Intel driver limit does not apply to DX12 games. Install RTSS to limit every game",
-    rtssConfirm: "Confirm the Windows prompt", rtssWorking: "Setting up…", powerDraw: "Power draw", charging: "Charging",
+    rtssConfirm: "Confirm the Windows prompt", rtssWorking: "Setting up…",
 };
 const S = {
     airplane: () => L("QuickAccess_Tab_Settings_Section_Shortcuts_AirplaneMode", "Airplane mode"),
@@ -864,18 +864,98 @@ function onlyFpsRows(el, rows) { // true if this element tree renders nothing bu
     };
     return walk(el) && found > 0;
 }
-// Returns { tree, placed }: Steam's panel with the FPS rows replaced by `replacement` (right under the battery row),
-// or the untouched panel with placed = false.
-function withoutSteamFpsRows(original, replacement) {
+// Projected charging time in Steam's battery block. On Windows Steam gets no time to full and shows "?h ?m" while
+// charging; the backend estimates it (battery.py) and only that "?h ?m" is replaced, in Steam's own format.
+// Steam's battery panel and its time column are components with hooks, recognised by their class-name keys
+// (BatterySectionContainer, BatteryProjectedValue). The panel's wrapper calls Steam's render function and swaps the
+// time column for one that calls Steam's. Steam's hooks run in the same order inside the wrappers, so its state and
+// updates are unchanged.
+const PerfVisible = R.createContext(false);
+const srcHits = new WeakMap(); // component -> { [needle]: bool }
+function srcHas(t, needle) {
+    if (typeof t !== "function") return false;
+    let hit = srcHits.get(t);
+    if (!hit) srcHits.set(t, (hit = {}));
+    if (!(needle in hit)) hit[needle] = Function.prototype.toString.call(t).includes(needle);
+    return hit[needle];
+}
+const isBatteryPanel = (t) => srcHas(t, "BatterySectionContainer") && !isPureRenderFn(t);
+const isBatteryDetails = (t) => srcHas(t, "BatteryProjectedValue");
+// Rebuilds an element tree with every element whose type matches `pred` re-typed to `map(type)`.
+function swapTypes(n, pred, map, state) {
+    if (Array.isArray(n)) {
+        const next = n.map((c) => swapTypes(c, pred, map, state));
+        return next.some((c, i) => c !== n[i]) ? next : n;
+    }
+    if (!R.isValidElement(n)) return n;
+    if (pred(n.type)) { state.hit = true; return jsx(map(n.type), n.props, n.key ?? undefined); }
+    const kids = n.props && n.props.children;
+    if (kids === undefined) return n;
+    const next = swapTypes(kids, pred, map, state);
+    return next === kids ? n : R.cloneElement(n, undefined, ...(Array.isArray(next) ? next : [next]));
+}
+function useChargeTime(needed) {
+    const visible = R.useContext(PerfVisible) && needed;
+    const [sec, setSec] = useState(null);
+    useEffect(() => {
+        if (!visible) return undefined;
+        let alive = true;
+        const poll = async () => {
+            try {
+                const b = await call(be.batteryState);
+                const v = b && typeof b.full_seconds === "number" ? Math.round(b.full_seconds / 60) * 60 : null;
+                if (alive) setSec(v);
+            }
+            catch { }
+        };
+        poll();
+        const t = setInterval(poll, 2000);
+        return () => { alive = false; clearInterval(t); setSec(null); };
+    }, [visible]);
+    return sec;
+}
+const batteryWrappers = new WeakMap(); // Steam component -> our wrapper, stable so React never remounts it
+function wrapperOf(type, make) {
+    let w = batteryWrappers.get(type);
+    if (!w) batteryWrappers.set(type, (w = make(type)));
+    return w;
+}
+let warnedBattery = false;
+function batteryWithChargeTime(Panel) {
+    return function WinQSBattery(props) {
+        const out = Panel(props);
+        const state = { hit: false };
+        const tree = swapTypes(out, isBatteryDetails, (D) => wrapperOf(D, detailsWithChargeTime), state);
+        if (!state.hit && out && !warnedBattery) { warnedBattery = true; console.warn(LOG, "Steam's battery time column not found"); }
+        return tree;
+    };
+}
+function detailsWithChargeTime(Details) {
+    return function WinQSBatteryDetails(props) {
+        const out = Details(props);
+        const [value, ...rest] = R.isValidElement(out) ? [].concat(out.props.children) : [];
+        const unknown = R.isValidElement(value) && typeof value.props.children === "string" && value.props.children.includes("?");
+        const sec = useChargeTime(unknown);
+        if (!unknown || sec === null) return out;
+        // Steam's own format and rounding: "%1$sh %2$sm" with whole hours and minutes, no padding
+        const text = L("QuickAccess_Tab_Perf_BatteryTimeRemaining", "%1$sh %2$sm")
+            .replace("%1$s", String(Math.floor(sec / 3600))).replace("%2$s", String(Math.floor(sec / 60) % 60));
+        return R.cloneElement(out, undefined, R.cloneElement(value, undefined, text), ...rest);
+    };
+}
+// Returns Steam's Performance panel without its FPS rows and with the charging time filled in the battery block. Parts it can't
+// recognise are left as Steam renders them.
+function patchSteamPerfPanel(original) {
+    if (!R.isValidElement(original)) return { tree: original, fps: false, battery: false };
     const rows = steamFpsRowTypes();
-    if (!rows || !R.isValidElement(original)) return { tree: original, placed: false };
-    let removed = false;
+    let fps = false, battery = false;
     const transform = (n, depth) => {
         if (Array.isArray(n)) return n.map((c) => transform(c, depth));
         if (!R.isValidElement(n)) return n;
+        if (isBatteryPanel(n.type)) { battery = true; return jsx(wrapperOf(n.type, batteryWithChargeTime), n.props, n.key ?? undefined); }
         if (isPureRenderFn(n.type) && !Object.keys(n.props || {}).length) {
             const out = n.type();
-            if (onlyFpsRows(out, rows)) { removed = true; return replacement || null; }
+            if (rows && onlyFpsRows(out, rows)) { fps = true; return null; }
             return depth < 3 ? transform(out, depth + 1) : n;
         }
         const kids = n.props && n.props.children;
@@ -885,45 +965,12 @@ function withoutSteamFpsRows(original, replacement) {
     };
     try {
         const out = transform(original, 0);
-        return removed ? { tree: out, placed: true } : { tree: original, placed: false };
+        return fps || battery ? { tree: out, fps, battery } : { tree: original, fps, battery };
     }
     catch (e) {
-        console.warn(LOG, "could not filter Steam's FPS rows", e);
-        return { tree: original, placed: false };
+        console.warn(LOG, "could not patch Steam's Performance panel", e);
+        return { tree: original, fps: false, battery: false };
     }
-}
-// Live battery discharge / charge rate, under Steam's battery row. Hidden when Windows reports no rate (on AC).
-function PowerDrawRow({ visible }) {
-    const [b, setB] = useState(null);
-    useEffect(() => {
-        if (!visible) return undefined;
-        let alive = true;
-        const poll = async () => {
-            try {
-                const r = await call(be.batteryState);
-                if (alive) setB((old) => (JSON.stringify(old) === JSON.stringify(r) ? old : r));
-            }
-            catch { }
-        };
-        poll();
-        const t = setInterval(poll, 2000);
-        return () => { alive = false; clearInterval(t); };
-    }, [visible]);
-    if (!b || !b.present || b.watts === null || b.watts === undefined) return null;
-    const text = b.watts > 0 ? b.watts.toFixed(1) + " W" : T.charging + " " + Math.abs(b.watts).toFixed(1) + " W";
-    // Steam's field markup without its Focusable: a read-only line must not be a node in the gamepad nav tree
-    // (DFL.Field always is one, and an empty nav node there stopped "up" from reaching the battery row)
-    const c = DFL.gamepadDialogClasses || {};
-    const cls = (...k) => k.map((x) => c[x]).filter(Boolean).join(" ");
-    return Row(jsxs("div", {
-        className: cls("Field", "Classic", "VerticalAlignCenter", "StandardPadding"), style: { "--indent-level": 0 },
-        children: [
-            jsx("div", { className: cls("FieldLeftColumn"),
-                children: jsx("div", { className: cls("FieldLabelRow"), children: jsx("div", { className: cls("FieldLabel"), children: T.powerDraw }) }) }),
-            jsx("div", { className: cls("FieldRightColumn"),
-                children: jsx("div", { className: cls("FieldChildrenWithIcon"), children: jsx("div", { className: cls("FieldChildrenInner"), children: text }) }) }),
-        ],
-    }), "powerdraw");
 }
 
 function usePerf(active) {
@@ -1148,16 +1195,19 @@ function InjectedPerfPanel({ original, visible }) {
     useWake();
     const off = stopped || tripped;
     useEffect(() => { if (!off) setStatus("perf", "active"); }, [off]);
-    return jsxs(Fragment, {
-        children: [
-            ...(off ? [original] : (() => {
-                const power = jsx(PowerDrawRow, { visible }, "winqs-power");
-                const r = withoutSteamFpsRows(original, power);
-                return r.placed ? [r.tree] : [r.tree, power];
-            })()),
-            off ? null : jsx(ErrorBoundary, { children: jsx(PerfSection, { active: visible }) }),
-            off ? null : jsx(ErrorBoundary, { children: jsx(FrameSection, { active: visible }) }),
-        ],
+    const r = off ? null : patchSteamPerfPanel(original);
+    useEffect(() => {
+        if (r && !(r.fps && r.battery)) console.warn(LOG, "Steam's Performance panel only partly patched", { fps: r.fps, battery: r.battery });
+    }, [r && r.fps, r && r.battery]);
+    return jsx(PerfVisible.Provider, {
+        value: !!visible,
+        children: jsxs(Fragment, {
+            children: [
+                off ? original : r.tree,
+                off ? null : jsx(ErrorBoundary, { children: jsx(PerfSection, { active: visible }) }),
+                off ? null : jsx(ErrorBoundary, { children: jsx(FrameSection, { active: visible }) }),
+            ],
+        }),
     });
 }
 InjectedPerfPanel[WRAP] = true;
