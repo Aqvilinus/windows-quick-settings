@@ -1,0 +1,20 @@
+{
+  "name": "Windows Quick Settings",
+  "author": "Ivan",
+  "flags": [],
+  "api_version": 1,
+  "publish": {
+    "tags": [
+      "windows",
+      "wifi",
+      "bluetooth",
+      "audio",
+      "brightness",
+      "hdr",
+      "frame limit",
+      "quick settings"
+    ],
+    "description": "Adds Wi-Fi, Bluetooth, audio, brightness, night mode and HDR controls to the Quick Settings tab of Steam Big Picture on Windows, plus a frame limit and battery power draw on the Performance tab.",
+    "image": ""
+  }
+}
