@@ -91,11 +91,8 @@ export async function withPending(key, value, fn) {
         emit(); // pending flag cleared even if the state itself did not change
     }
 }
-// A radio switch returns Windows' access status
-export const runAction = (key, value, fn) => withPending(key, value, async () => {
-    const res = await fn();
-    if (typeof res === "string" && res !== "allowed") toast(T.accessDenied + " (" + res + ")");
-});
+// set_wifi / set_bluetooth return Windows' radio access status
+export const checkAccess = (status) => { if (status !== "allowed") toast(T.accessDenied + " (" + status + ")"); };
 export const pending = (k) => store.pending[k];
 // A backend action from a dialog: toasts the message it returns (or the error), reloads the state, then `after`.
 export async function act(fn, after) {

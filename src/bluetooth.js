@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { jsx } from "react/jsx-runtime";
 import { be, call } from "./backend.js";
 import { S, T, errText, toast } from "./strings.js";
-import { DIM, act, deviceIcon, dialog, dimIf, pending, pressable, refresh, runAction, showModalHere, spinner, useStableOrder } from "./ui.js";
+import { DIM, act, deviceIcon, dialog, dimIf, pending, pressable, refresh, showModalHere, spinner, useStableOrder, withPending } from "./ui.js";
 
 // ---------------------------------------------------------------- Bluetooth device rows
 export function BtDeviceRow({ device: d }) {
@@ -14,7 +14,7 @@ export function BtDeviceRow({ device: d }) {
         if (working) return;
         if (!d.audio_control) { toast(T.btNoControl); return; }
         const connect = !isConnected;
-        runAction(key, connect, async () => {
+        withPending(key, connect, async () => {
             await call(be.bluetoothAudio, d.name, connect);
             await DFL.sleep(2500);
         });

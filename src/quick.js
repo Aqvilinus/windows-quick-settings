@@ -4,7 +4,7 @@ import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { be, call } from "./backend.js";
 import { BtDeviceRow, addBtDevice, openSettingsPage } from "./bluetooth.js";
 import { IS_RU, L, S, T } from "./strings.js";
-import { Row, ValueSlider, chevron, icon, pending, pressable, runAction, sep, spinner, store, useAutoRefresh, useStore } from "./ui.js";
+import { Row, ValueSlider, chevron, icon, checkAccess, pending, pressable, sep, spinner, store, useAutoRefresh, useStore, withPending } from "./ui.js";
 import { MAX_INLINE_NETWORKS, NetworkRow, openWifiModal } from "./wifi.js";
 
 export function QuickSettings({ active }) {
@@ -34,10 +34,9 @@ export function QuickSettings({ active }) {
     // full list (which starts a scan) is the way to look for other networks
     const moreNets = !s.wifi_location_off;
     const btDevices = s.bt_devices || [];
-    // the void wrappers keep runAction from reading the result as a radio access status
     const toggle = (key, label, iconName, checked, send) => Row(jsx(DFL.ToggleField, {
         label, icon: icon(iconName), checked: pending(key) ?? checked, disabled: pending(key) !== undefined,
-        onChange: (v) => runAction(key, v, async () => { await send(v); }),
+        onChange: (v) => withPending(key, v, () => send(v)),
     }), key);
 
     return jsxs(Fragment, {
@@ -68,13 +67,13 @@ export function QuickSettings({ active }) {
                 children: [
                     (wifiPresent || btPresent) && Row(jsx(DFL.ToggleField, {
                         label: S.airplane(), icon: icon("AirplaneMode"), checked: airplaneOn, disabled: busy,
-                        onChange: (v) => runAction("airplane", v, async () => { await call(be.setAirplane, v); }),
+                        onChange: (v) => withPending("airplane", v, () => call(be.setAirplane, v)),
                     }), "airplane"),
                     wifiPresent && Row(jsx(DFL.ToggleField, {
                         label: S.wifi(), icon: icon("WiFi"), checked: wifiOn, bottomSeparator: sep(!wifiOn),
                         disabled: busy || radios.wifi === "disabled",
                         description: radios.wifi === "disabled" ? T.radioDisabled : null,
-                        onChange: (v) => runAction("wifi", v, () => call(be.setWifi, v)),
+                        onChange: (v) => withPending("wifi", v, () => call(be.setWifi, v).then(checkAccess)),
                     }), "wifi"),
                     wifiList && s.wifi_location_off && Row(jsx(DFL.Field, {
                         label: T.locationOff, description: T.locationHint, indentLevel: 1, bottomSeparator: "standard",
@@ -92,7 +91,7 @@ export function QuickSettings({ active }) {
                         label: S.bluetooth(), icon: icon("Bluetooth"), checked: btOn, bottomSeparator: sep(!btOn),
                         disabled: busy || radios.bluetooth === "disabled",
                         description: radios.bluetooth === "disabled" ? T.radioDisabled : s.errors?.bluetooth || null,
-                        onChange: (v) => runAction("bluetooth", v, () => call(be.setBluetooth, v)),
+                        onChange: (v) => withPending("bluetooth", v, () => call(be.setBluetooth, v).then(checkAccess)),
                     }), "bt"),
                     ...(btPresent && btOn ? btDevices.map((d) => Row(jsx(BtDeviceRow, { device: d }), "bt-" + d.address)) : []),
                     btPresent && btOn && Row(jsx(DFL.Field, {
@@ -118,6 +117,6 @@ function AudioDevicePicker({ flow, list }) {
         rgOptions: list.map((d) => ({ data: d.id, label: d.name })),
         selectedOption: current,
         bottomSeparator: "none",
-        onChange: (o) => { if (o && o.data !== current) runAction(key, o.data, () => call(be.setAudioDevice, flow, o.data)); },
+        onChange: (o) => { if (o && o.data !== current) withPending(key, o.data, () => call(be.setAudioDevice, flow, o.data)); },
     }));
 }
