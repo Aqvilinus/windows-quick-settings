@@ -671,7 +671,10 @@ function WifiModal({ closeModal }) {
     useEffect(() => {
         load(false).then(() => load(true));
         recheckConnectivity();
-        const t = setInterval(() => load(true, true), 10000); // like the Deck's list: keeps itself current
+        // like the Deck's list: keeps itself current. A scan disturbs a connected link (lag in games), so while
+        // connected it only re-reads the list Windows keeps current with its own scans; Rescan still scans.
+        const connected = () => (store.state?.wifi_networks || []).some((n) => n.connected);
+        const t = setInterval(() => load(!connected(), true), 10000);
         return () => clearInterval(t);
     }, []);
     return dialog(closeModal, S.networksFound(), [
