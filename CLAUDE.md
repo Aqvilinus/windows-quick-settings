@@ -17,7 +17,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - `com.py`: sets `sys.coinit_flags = 0` (comtypes initialises COM on import; the process is MTA for pywinrt), `GUID`, `init_worker` (MTA, EcoQoS off). Import it before comtypes.
   - `wlan.py` (Native Wifi API over ctypes): WinRT can't delete profiles, so it stays.
   - `audio.py` / `btaudio.py`: `IMMDevice.GetId` goes through comtypes' raw `__com_GetId` so the string is freed (it runs on every poll).
-- `src/index.js`: the whole frontend (plain JavaScript), built into `dist/index.js` (git-ignored) by `pnpm run build` (see `rollup.config.js`).
+- `src/`: the frontend (plain JavaScript, ES modules), bundled into `dist/index.js` (git-ignored) by `pnpm run build` (see `rollup.config.js`). `index.js` is the entry and lists what each module holds. ES imports are read-only, so a module's mutable `let` state is changed only by that module's own functions.
 
 ## Workflow
 
