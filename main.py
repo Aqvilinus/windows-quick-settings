@@ -185,8 +185,12 @@ class Plugin:
         """PIDs of Steam's per-game overlay processes. Idempotent: the frontend sends the full list on every change."""
         if self.hotkeys is None:
             return {"ok": False, "error": "hotkeys unavailable"}
-        self.hotkeys.set_overlays(list(overlay_pids or []))
-        if overlay_pids:
+        try:
+            pids = [int(p) for p in overlay_pids or []]
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "overlay pids must be numbers"}
+        self.hotkeys.set_overlays(pids)
+        if pids:
             self._service().submit(self.svc.rtss_keepalive)  # fire and forget, on the worker
         await asyncio.sleep(0.05)
         return {"ok": True, "result": self.hotkeys.status()}

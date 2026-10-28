@@ -545,7 +545,9 @@ function openSignInPage() {
         try { show(owner, manual); return; }
         catch (e) { console.warn(LOG, "Steam's sign-in dialog failed", e); }
     }
-    DFL.Navigation.NavigateToExternalWeb(c?.strCaptivePortalURL || STEAM_PORTAL_URL);
+    // the portal address comes from the network itself: only a web page is opened, never another URL scheme
+    const url = c?.strCaptivePortalURL;
+    DFL.Navigation.NavigateToExternalWeb(/^https?:\/\//i.test(url || "") ? url : STEAM_PORTAL_URL);
 }
 // After joining a network: let Steam probe again and, like SteamOS, open the sign-in dialog if the network wants one.
 async function signInIfNeeded() {

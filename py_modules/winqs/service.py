@@ -24,6 +24,7 @@ NETWORKS_MAX_AGE = 20   # s; with notifications the list is re-read on changes, 
 FLOWS = ("output", "input")
 
 SID_RE = re.compile(r"S-1-\d+(-\d+)+")
+APPID_RE = re.compile(r"\d{1,10}")
 # Read once at backend start (see setup_rtss): the elevated step never runs a file from the user-writable folder.
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_rtss.ps1"), encoding="utf-8-sig") as _f:
     SETUP_RTSS_SCRIPT = _f.read()
@@ -438,12 +439,15 @@ class SystemService:
 
     def set_frame_limit(self, fps):
         """fps 0 = no limit, stored in the active profile. The refresh rate is left alone: the panel has VRR."""
+        fps = max(0, int(fps))
         result = self._limiter().set(fps)
+        if fps:  # store what the limiter applies, not an out-of-range request
+            fps = max(int(result.get("min") or 30), min(int(result.get("max") or 300), fps))
         data = self._load()
         prof, _ = self._active_profile(data)
-        prof["fps"] = int(fps)
-        if fps and fps > 0:
-            prof["last"] = int(fps)
+        prof["fps"] = fps
+        if fps:
+            prof["last"] = fps
         self._save(data)
         return result
 
@@ -468,6 +472,8 @@ class SystemService:
         has a per-game profile; between two default contexts the limit is left alone, so a limit set elsewhere
         (OneXConsole) is not undone. Idempotent: the frontend also resends it as a heartbeat."""
         game = str(appid) if appid not in (None, "", 0, "0") else None
+        if game is not None and not APPID_RE.fullmatch(game):  # a Steam appid (shortcuts too) is a 32-bit number
+            raise ValueError("not a Steam app id")
         if game == self._game:
             return {"game": game}
         data = self._load()
