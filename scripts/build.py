@@ -66,7 +66,7 @@ def requirement_names():
         for line in f:
             line = line.split("#", 1)[0].strip()
             if line and not line.startswith("-"):  # skip the --hash continuation lines
-                names.add(normalize(re.split(r"[=<>!~ ]", line, 1)[0]))
+                names.add(normalize(re.split(r"[=<>!~ ]", line, maxsplit=1)[0]))
     return names
 
 

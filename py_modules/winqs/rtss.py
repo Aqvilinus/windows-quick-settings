@@ -17,7 +17,7 @@ import time
 import winreg
 
 import psutil
-from ctypes import byref, c_bool, c_char_p, c_int32, c_uint32, c_void_p, wintypes
+from ctypes import byref, c_bool, c_char_p, c_int32, c_uint32, c_void_p
 
 TASK = "WinQS RTSS"
 

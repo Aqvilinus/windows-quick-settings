@@ -42,6 +42,12 @@ jobs:
         with:
           python-version: ${{ env.DECKY_PYTHON }}
 
+      - name: Lint the plugin's Python (rules in ruff.toml)
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check -q ruff==0.17.1
+          python -m ruff check main.py scripts py_modules/winqs
+
       - name: Build
         shell: bash
         env:
