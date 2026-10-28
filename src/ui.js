@@ -132,36 +132,44 @@ export function useStableOrder(keyOf) {
     };
 }
 
-// Slider that sends values to the backend without flooding it ("latest value wins"),
-// and ignores polled values for a moment after the user touched it.
-const lastTouch = {};
-export function ValueSlider({ id, value, icon, send }) {
-    const [local, setLocal] = useState(value);
-    const sending = useRef(false);
-    const wanted = useRef(null);
-    useEffect(() => {
-        if (Date.now() - (lastTouch[id] || 0) > 1500) setLocal(value);
-    }, [value]);
-    const pump = async () => {
-        if (sending.current) return;
-        sending.current = true;
+// "Latest value wins": at most one send(v) in flight, and only the newest value waiting behind it, so dragging a
+// slider across many steps sends the last one rather than each. Errors are shown as toasts.
+export function latestWins(send) {
+    let sending = false, waiting = false, wanted;
+    return async (v) => {
+        wanted = v;
+        waiting = true;
+        if (sending) return;
+        sending = true;
         try {
-            while (wanted.current !== null) {
-                const v = wanted.current;
-                wanted.current = null;
-                try { await send(v); }
+            while (waiting) {
+                waiting = false;
+                try { await send(wanted); }
                 catch (e) { toast(errText(e)); }
             }
         }
-        finally { sending.current = false; }
+        finally { sending = false; }
     };
+}
+
+// Slider that sends values to the backend without flooding it, and ignores polled values for a moment after the
+// user touched it.
+const lastTouch = {};
+export function ValueSlider({ id, value, icon, send }) {
+    const [local, setLocal] = useState(value);
+    const sendRef = useRef(send);
+    sendRef.current = send;
+    const push = useRef(null);
+    push.current ??= latestWins((v) => sendRef.current(v));
+    useEffect(() => {
+        if (Date.now() - (lastTouch[id] || 0) > 1500) setLocal(value);
+    }, [value]);
     return jsx(DFL.SliderField, {
         value: local, min: 0, max: 100, step: 1, showValue: false, icon: typeof icon === "function" ? icon(local) : icon,
         onChange: (v) => {
             setLocal(v);
             lastTouch[id] = Date.now();
-            wanted.current = v;
-            pump();
+            push.current(v);
         },
     });
 }

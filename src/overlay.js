@@ -3,8 +3,8 @@ import * as R from "react";
 import { useEffect, useState } from "react";
 import { jsx } from "react/jsx-runtime";
 import { LOG, be, call, lazy } from "./backend.js";
-import { L, T, errText, toast } from "./strings.js";
-import { Row, clamp, dialog, showModalHere } from "./ui.js";
+import { L, T } from "./strings.js";
+import { Row, clamp, dialog, latestWins, showModalHere } from "./ui.js";
 
 // ---------------------------------------------------------------- Performance tab: overlay level
 // Steam for Windows has a full performance monitor (detail levels, text size, contrast,
@@ -27,25 +27,12 @@ function getClientSetting(k) {
 // later mirrors it back into settingsStore: 40-300 ms usually, sometimes ~3 s. So the UI shows
 // the value just written right away, until Steam reports the same value (or 5 s pass), and each
 // key has at most one write in flight: dragging OFF->4 sends only the latest notch, not 1,2,3,4.
-const perfShown = {};    // key -> { v, t } value shown before Steam confirms it
-const perfWanted = {};   // key -> value waiting to be sent
-const perfSending = {};  // key -> write in flight
+const perfShown = {};   // key -> { v, t } value shown before Steam confirms it
+const perfWriters = {};  // key -> latestWins writer
 function setClientSetting(k, v) {
     perfShown[k] = { v, t: Date.now() };
-    perfWanted[k] = v;
-    if (!perfSending[k]) sendClientSetting(k);
-}
-async function sendClientSetting(k) {
-    perfSending[k] = true;
-    try {
-        while (k in perfWanted) {
-            const v = perfWanted[k];
-            delete perfWanted[k];
-            try { await window.settingsStore.GetClientSetting(k)[1](v); }
-            catch (e) { toast(errText(e)); }
-        }
-    }
-    finally { perfSending[k] = false; }
+    perfWriters[k] ??= latestWins((x) => window.settingsStore.GetClientSetting(k)[1](x));
+    perfWriters[k](v);
 }
 function readPerfKey(k) {
     const real = getClientSetting(k);
