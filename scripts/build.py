@@ -1,6 +1,6 @@
 """Build the plugin zip: frontend with pnpm, Python packages with pip, then one archive for Decky.
 
-    python scripts/build.py [--version 0.2.0] [--python 3.14] [--local]
+    python scripts/build.py [--version 0.2.0] [--python 3.14] [--local] [--set-version-only]
 
   --version  plugin version written into the zip's package.json and the zip name (default: package.json's)
   --python   Python version of the Decky Loader that runs the plugin: compiled wheels and python3.dll must match it
@@ -115,6 +115,15 @@ def add_python3_dll(target, python):
         out.write(z.read("python3.dll"))
 
 
+def set_version(package_json, version):
+    with open(package_json, encoding="utf-8") as f:
+        package = json.load(f)
+    package["version"] = version
+    with open(package_json, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(package, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
 def stage(version, python):
     dest = os.path.join(BUILD, FOLDER)
     shutil.rmtree(dest, ignore_errors=True)
@@ -123,12 +132,7 @@ def stage(version, python):
         shutil.copy2(os.path.join(ROOT, rel), os.path.join(dest, rel))
     for rel in PLUGIN_DIRS:
         shutil.copytree(os.path.join(ROOT, rel), os.path.join(dest, rel), ignore=shutil.ignore_patterns("__pycache__"))
-    with open(os.path.join(dest, "package.json"), encoding="utf-8") as f:
-        package = json.load(f)
-    package["version"] = version
-    with open(os.path.join(dest, "package.json"), "w", encoding="utf-8", newline="\n") as f:
-        json.dump(package, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    set_version(os.path.join(dest, "package.json"), version)
     py_modules = os.path.join(dest, "py_modules")
     install_packages(py_modules, python)
     add_python3_dll(py_modules, python)
@@ -185,10 +189,15 @@ def main():
     ap.add_argument("--version", default=current, help="plugin version (default: %(default)s from package.json)")
     ap.add_argument("--python", default="3.14", help="Decky Loader's Python version (default: %(default)s)")
     ap.add_argument("--local", action="store_true", help="also update this checkout's py_modules/")
+    ap.add_argument("--set-version-only", action="store_true",
+                    help="only write --version into this checkout's package.json (the Release workflow's version commit)")
     args = ap.parse_args()
     version = args.version.lstrip("v")
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         sys.exit("version must look like 1.2.3, got %r" % args.version)
+    if args.set_version_only:
+        set_version(os.path.join(ROOT, "package.json"), version)
+        return
 
     build_frontend()
     dest = stage(version, args.python)

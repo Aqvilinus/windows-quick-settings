@@ -77,15 +77,7 @@ jobs:
 
       - name: Commit the version and tag it
         run: |
-          python3 - "$VERSION" <<'EOF'
-          import json, sys
-          with open("package.json", encoding="utf-8") as f:
-              package = json.load(f)
-          package["version"] = sys.argv[1]
-          with open("package.json", "w", encoding="utf-8", newline="\n") as f:
-              json.dump(package, f, indent=2, ensure_ascii=False)
-              f.write("\n")
-          EOF
+          python3 scripts/build.py --version "$VERSION" --set-version-only
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if ! git diff --quiet package.json; then
