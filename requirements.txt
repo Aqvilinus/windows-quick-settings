@@ -2,25 +2,43 @@
 #   pip install -r requirements.txt --target py_modules --platform win_amd64 --python-version <Decky's Python>
 #               --implementation cp --only-binary=:all:
 # Decky's own Python has no pip, and the wheels must match its version (Decky 3.3.x for Windows: Python 3.14).
-# Versions are pinned, including the indirect dependency winrt-Windows.Storage.Streams.
+# Versions are pinned, including the indirect dependency winrt-Windows.Storage.Streams, and pip installs them with
+# --require-hashes: each line carries the sha256 of the wheel pip picks for win_amd64 / CPython 3.14 (only
+# winrt-runtime is version-specific). After changing a version or Decky's Python, refresh the hashes from
+#   pip download --no-deps -r requirements.txt -d <dir> --platform win_amd64 --python-version 3.14 --implementation cp --only-binary=:all:
 
 # pywinrt v4 (Windows Runtime APIs). The namespace packages carry an epoch: "4!" is part of the version.
-winrt-runtime==4.0.3
-winrt-Windows.Devices.Bluetooth==4!10.0.28000.2705
-winrt-Windows.Devices.Enumeration==4!10.0.28000.2705
-winrt-Windows.Devices.Power==4!10.0.28000.2705
-winrt-Windows.Devices.Radios==4!10.0.28000.2705
-winrt-Windows.Foundation==4!10.0.28000.2705
-winrt-Windows.Foundation.Collections==4!10.0.28000.2705
-winrt-Windows.Networking==4!10.0.28000.2705
-winrt-Windows.Networking.Connectivity==4!10.0.28000.2705
-winrt-Windows.Storage.Streams==4!10.0.28000.2705
-winrt-Windows.System.Power==4!10.0.28000.2705
-typing_extensions==4.16.0
+winrt-runtime==4.0.3 \
+    --hash=sha256:03d76d06172b6f5bb6312aa24f0d25761b1e45fe2b7c3c0b4ad0cd73a06bb293
+winrt-Windows.Devices.Bluetooth==4!10.0.28000.2705 \
+    --hash=sha256:c68bdb970459eab888cf03764d50ee156eedd10fd02aceefb161babad0ba3dc7
+winrt-Windows.Devices.Enumeration==4!10.0.28000.2705 \
+    --hash=sha256:719e7f638db3d324f54ce86ed09689dce11374aa60fbe2b14843651bee266fc8
+winrt-Windows.Devices.Power==4!10.0.28000.2705 \
+    --hash=sha256:4c909a26cbd315e0d9321d1ac1ab56837803c6b5b849e05a0dab4b684e1d46bf
+winrt-Windows.Devices.Radios==4!10.0.28000.2705 \
+    --hash=sha256:1852902c3c89ba9ca291bfa4099d3ead923eca6c38a4c421b99a35cebd717f62
+winrt-Windows.Foundation==4!10.0.28000.2705 \
+    --hash=sha256:b409530668b101cb17b3a6ce02061b9839665c92b64b0563c106186d87562571
+winrt-Windows.Foundation.Collections==4!10.0.28000.2705 \
+    --hash=sha256:f2169228644b86d752dca6f4ba0bb55ee27c5cc1062f3a3f0fbb375f48894bd7
+winrt-Windows.Networking==4!10.0.28000.2705 \
+    --hash=sha256:de24b5d2b8f523159e6559b83c2c8fea4ac5259be877b132a58b2f72c6240cd8
+winrt-Windows.Networking.Connectivity==4!10.0.28000.2705 \
+    --hash=sha256:a625c30770b95dccb6efaa89323dd743705cbec297b879248d2bda453c23ea0f
+winrt-Windows.Storage.Streams==4!10.0.28000.2705 \
+    --hash=sha256:2824e516e328c9ba76ffc7926431255b124b4a9f52c656f0b1e0056a7f8ca7b8
+winrt-Windows.System.Power==4!10.0.28000.2705 \
+    --hash=sha256:7a42d0d805ecf3f5b046f2687cd1e4cdc6af4ec741c532d50a9e0207587accd4
+typing_extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
 
 # Core Audio (classic COM, which pywinrt can't call)
-comtypes==1.4.17
-pycaw==20260927
+comtypes==1.4.17 \
+    --hash=sha256:4e0a221dde2c589b82977bed802efd71cd5eb67a380347b732e02735e597f586
+pycaw==20260927 \
+    --hash=sha256:d5b162a87536956af8dfa0fc53b1c77870a30706445ffd7f92a2ed184f65ddf4
 
 # Process list and command lines
-psutil==7.2.2
+psutil==7.2.2 \
+    --hash=sha256:eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988

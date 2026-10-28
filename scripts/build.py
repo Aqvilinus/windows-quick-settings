@@ -65,7 +65,7 @@ def requirement_names():
     with open(os.path.join(ROOT, "requirements.txt"), encoding="utf-8") as f:
         for line in f:
             line = line.split("#", 1)[0].strip()
-            if line:
+            if line and not line.startswith("-"):  # skip the --hash continuation lines
                 names.add(normalize(re.split(r"[=<>!~ ]", line, 1)[0]))
     return names
 
@@ -76,7 +76,7 @@ def normalize(name):
 
 def install_packages(target, python):
     run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-compile",
-         "--requirement", os.path.join(ROOT, "requirements.txt"), "--target", target,
+         "--require-hashes", "--requirement", os.path.join(ROOT, "requirements.txt"), "--target", target,
          "--platform", "win_amd64", "--python-version", python, "--implementation", "cp", "--only-binary=:all:"])
     # every installed distribution must be pinned in requirements.txt (pip would quietly add a new dependency)
     installed = {normalize(d.split("-")[0]) for d in os.listdir(target) if d.endswith(".dist-info")}
