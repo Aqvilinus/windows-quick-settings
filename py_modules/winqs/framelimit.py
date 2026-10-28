@@ -10,72 +10,38 @@ Structures follow include/igcl_api.h from github.com/intel/drivers.gpu.control-l
 import ctypes
 import os
 import time
-from ctypes import (POINTER, Structure, Union, byref, c_bool, c_char_p, c_float, c_int8, c_int16, c_int32, c_int64,
-                    c_uint8, c_uint16, c_uint32, c_uint64, c_void_p, sizeof)
+from ctypes import (POINTER, Structure, Union, byref, c_bool, c_char_p, c_int8, c_int16, c_int32, c_int64, c_uint8,
+                    c_uint16, c_uint32, c_uint64, c_void_p, sizeof)
 
 CTL_3D_FEATURE_FRAME_LIMIT = 2
 CTL_PROPERTY_VALUE_TYPE_INT32 = 2
 CTL_API_VERSION = (1 << 16) | 1
 
 
-class _RangeF(Structure):
-    _fields_ = [("min", c_float), ("max", c_float), ("step", c_float), ("default", c_float)]
-
-
+# Only the int32 member of IGCL's value unions is used (the frame limit is an int). The unions keep their C size and
+# alignment through a filler, since _FeatDetails is read as an array: checked against the full declarations, 24 / 8
+# bytes for the info union and 8 / 4 for the value union.
 class _RangeI(Structure):
     _fields_ = [("min", c_int32), ("max", c_int32), ("step", c_int32), ("default", c_int32)]
-
-
-class _RangeU(Structure):
-    _fields_ = [("min", c_uint32), ("max", c_uint32), ("step", c_uint32), ("default", c_uint32)]
-
-
-class _InfoB(Structure):
-    _fields_ = [("DefaultState", c_bool)]
-
-
-class _InfoF(Structure):
-    _fields_ = [("DefaultEnable", c_bool), ("Range", _RangeF)]
 
 
 class _InfoI(Structure):
     _fields_ = [("DefaultEnable", c_bool), ("Range", _RangeI)]
 
 
-class _InfoE(Structure):
-    _fields_ = [("SupportedTypes", c_uint64), ("DefaultType", c_uint32)]
-
-
-class _InfoU(Structure):
-    _fields_ = [("DefaultEnable", c_bool), ("Range", _RangeU)]
-
-
-class _PropInfo(Union):
-    _fields_ = [("B", _InfoB), ("F", _InfoF), ("I", _InfoI), ("E", _InfoE), ("U", _InfoU)]
-
-
-class _PropB(Structure):
-    _fields_ = [("Enable", c_bool)]
-
-
-class _PropF(Structure):
-    _fields_ = [("Enable", c_bool), ("Value", c_float)]
+class _PropInfo(Union):  # ctl_property_info_t; its enum member (uint64 + uint32) sets the 8-byte alignment
+    _fields_ = [("I", _InfoI), ("_size", c_uint64 * 3)]
 
 
 class _PropI(Structure):
     _fields_ = [("Enable", c_bool), ("Value", c_int32)]
 
 
-class _PropE(Structure):
-    _fields_ = [("EnableType", c_uint32)]
+class _Prop(Union):  # ctl_property_t: every member fits in the int32 one
+    _fields_ = [("I", _PropI)]
 
 
-class _PropU(Structure):
-    _fields_ = [("Enable", c_bool), ("Value", c_uint32)]
-
-
-class _Prop(Union):
-    _fields_ = [("B", _PropB), ("F", _PropF), ("I", _PropI), ("E", _PropE), ("U", _PropU)]
+assert (sizeof(_PropInfo), ctypes.alignment(_PropInfo), sizeof(_Prop), ctypes.alignment(_Prop)) == (24, 8, 8, 4)
 
 
 class _AppId(Structure):
