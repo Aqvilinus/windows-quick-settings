@@ -177,8 +177,10 @@ class SystemService:
         out["hdr"] = h if h.get("supported") else None
         out["night"] = _collect(err, "night", nightlight.is_enabled)
         out["brightness"] = _collect(err, "brightness", brightness.get_level)
-        out["audio"] = {f: _collect(err, "audio_" + f, lambda f=f: audio.get(f)) for f in FLOWS}
-        out["audio_devices"] = {f: _collect(err, "audio_devices_" + f, lambda f=f: audio.devices(f), []) for f in FLOWS}
+        out["audio"], out["audio_devices"] = {}, {}
+        for f in FLOWS:
+            out["audio"][f], out["audio_devices"][f] = _collect(err, "audio_" + f, lambda f=f: audio.get(f),
+                                                                (None, []))
         r = out["radios"]
         present = [v for v in r.values() if v is not None]
         out["airplane"] = bool(present) and all(v == "off" for v in present) and bool(self._load().get("airplane"))
@@ -308,12 +310,12 @@ class SystemService:
     def bluetooth_devices(self):
         devices = self._bt_paired.devices()
         try:
-            audio = {a["name"]: a for a in btaudio.list_audio_devices()}
+            bt_audio = {a["name"]: a for a in btaudio.list_audio_devices()}
         except Exception as e:  # noqa: BLE001
             self.log("audio endpoint enumeration failed: %s" % e)
-            audio = {}
+            bt_audio = {}
         for d in devices:
-            a = audio.get(d["name"])
+            a = bt_audio.get(d["name"])
             d["audio_control"] = a is not None
             if a is not None:
                 d["audio_connected"] = a["connected"]

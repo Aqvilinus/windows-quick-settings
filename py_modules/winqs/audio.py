@@ -26,8 +26,21 @@ CLSID_PolicyConfigVista = GUID("{294935CE-F637-4E7C-A41B-AB255460B862}")
 PKEY_Device_FriendlyName = ("{A45C254E-DF1C-4EFD-8020-67D146A850E0}", 14)
 
 
+_enumerator = None
+
+
 def enumerator():
-    return comtypes.CoCreateInstance(CLSID_MMDeviceEnumerator, IMMDeviceEnumerator, CLSCTX_ALL)
+    """One MMDeviceEnumerator for the process (it is free-threaded; creating one per call cost ~0.2 ms each, five
+    times per poll). reset() drops it after a COM error, e.g. when the audio service was restarted."""
+    global _enumerator
+    if _enumerator is None:
+        _enumerator = comtypes.CoCreateInstance(CLSID_MMDeviceEnumerator, IMMDeviceEnumerator, CLSCTX_ALL)
+    return _enumerator
+
+
+def reset():
+    global _enumerator
+    _enumerator = None
 
 
 def device_id(dev):
@@ -53,21 +66,19 @@ def prop_string(dev, key):
         pv.clear()
 
 
-def _default_device(flow, enum=None):
+def _default_device(flow):
     try:
-        return (enum or enumerator()).GetDefaultAudioEndpoint(FLOW[flow], E_MULTIMEDIA)
+        return enumerator().GetDefaultAudioEndpoint(FLOW[flow], E_MULTIMEDIA)
     except COMError as e:
         if e.hresult == E_NOTFOUND:
             return None
+        reset()  # e.g. the audio service restarted: the next call gets a new enumerator
         raise
 
 
-def devices(flow):
-    """Active endpoints of a flow: [{'id', 'name', 'default'}], default device first."""
-    enum = enumerator()
-    default = _default_device(flow, enum)
+def _devices(flow, default):
     default_id = device_id(default).lower() if default is not None else None
-    coll = enum.EnumAudioEndpoints(FLOW[flow], DEVICE_STATE_ACTIVE)
+    coll = enumerator().EnumAudioEndpoints(FLOW[flow], DEVICE_STATE_ACTIVE)
     out = []
     for i in range(coll.GetCount()):
         dev = coll.Item(i)
@@ -76,6 +87,22 @@ def devices(flow):
                     "default": dev_id.lower() == default_id})
     out.sort(key=lambda d: (not d["default"], d["name"].lower()))
     return out
+
+
+def devices(flow):
+    """Active endpoints of a flow: [{'id', 'name', 'default'}], default device first."""
+    return _devices(flow, _default_device(flow))
+
+
+def get(flow):
+    """({'volume': 0-100, 'muted': bool} or None without a default device, devices(flow)): one lookup of the
+    default device for both, as the poll needs them together."""
+    default = _default_device(flow)
+    devs = _devices(flow, default)
+    if default is None:
+        return None, devs
+    vol = _endpoint_volume(default)
+    return {"volume": int(round(vol.GetMasterVolumeLevelScalar() * 100)), "muted": bool(vol.GetMute())}, devs
 
 
 def set_default(flow, dev_id):
@@ -96,16 +123,6 @@ def set_default(flow, dev_id):
 
 def _endpoint_volume(dev):
     return dev.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None).QueryInterface(IAudioEndpointVolume)
-
-
-def get(flow):
-    """{'volume': 0-100, 'muted': bool, 'name': str} for the default device, or None if there is none."""
-    dev = _default_device(flow)
-    if dev is None:
-        return None
-    vol = _endpoint_volume(dev)
-    return {"volume": int(round(vol.GetMasterVolumeLevelScalar() * 100)), "muted": bool(vol.GetMute()),
-            "name": prop_string(dev, PKEY_Device_FriendlyName)}
 
 
 def set_volume(flow, value):
