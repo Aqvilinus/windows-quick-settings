@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
 
 from . import audio, battery, brightness, bt, btaudio, display, hdr, nightlight, nlm, radios, rtss
@@ -442,10 +443,13 @@ class SystemService:
                 + base64.b64encode(command.encode("utf-16-le")).decode("ascii"))
         self._rtss.forget_status()
         powershell = _system32("WindowsPowerShell", "v1.0", "powershell.exe")
-        try:
-            os.startfile(powershell, "runas", args, None, 0)  # ShellExecute "runas": Windows' UAC prompt, hidden
-        except OSError as e:
-            raise OSError(e.errno, "the setup was not started (cancelled?)") from e
+
+        def launch():  # ShellExecute "runas" returns only once the UAC prompt is answered: not on the worker thread
+            try:
+                os.startfile(powershell, "runas", args, None, 0)
+            except OSError as e:
+                self.log("RTSS setup not started (UAC prompt cancelled?): %s" % e)
+        threading.Thread(target=launch, name="winqs-rtss-setup", daemon=True).start()
         return {"started": True}
 
     @staticmethod
