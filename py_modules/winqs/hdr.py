@@ -115,8 +115,8 @@ def state():
 
 
 def set_enabled(on):
-    """Ask Windows to switch HDR. The switch takes about a second; the caller confirms it with state() (main.py
-    waits for it outside the worker thread, so other calls aren't held up meanwhile)."""
+    """Switch HDR. Windows' call blocks for about a second and the new state can show a moment later; main.py runs
+    it on a thread of its own and confirms it with state(), so the worker thread isn't held up meanwhile."""
     adapter, tid = _target()
     st = SET_STATE(HEADER(SET_HDR_STATE, sizeof(SET_STATE), adapter, tid), 1 if on else 0)
     if _user32.DisplayConfigSetDeviceInfo(byref(st)) != 0:

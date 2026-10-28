@@ -135,12 +135,13 @@ class Plugin:
         return await self._call("perf_state", timeout=10)
 
     async def set_hdr(self, on):
-        """Switch on the worker, then wait here (up to 3.5 s) until Windows reports the new state: the switch takes
-        about a second, and brightness / volume calls must not queue behind it."""
+        """Windows' own switch call blocks for about a second, so it runs on a thread of its own (plain Win32, no COM)
+        rather than on the worker, then this waits (up to 3.5 s) for the new state: brightness / volume calls and
+        get_state must not queue behind it."""
         on = bool(on)
 
         async def go():
-            now = await self._run("set_hdr", on, timeout=10)
+            now = await asyncio.wait_for(asyncio.to_thread(SystemService.set_hdr, on), 10)
             loop = asyncio.get_running_loop()
             deadline = loop.time() + 3.5
             while now["on"] != on and loop.time() < deadline:
