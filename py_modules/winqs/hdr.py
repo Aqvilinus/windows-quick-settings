@@ -5,7 +5,6 @@ GET_ADVANCED_COLOR_INFO (type 9). Writes SET_HDR_STATE (type 16), falling back t
 (type 10). The change is read back, as Windows can refuse it (e.g. on battery saver or by policy).
 """
 import ctypes
-import time
 from ctypes import byref, sizeof, wintypes
 
 _user32 = ctypes.WinDLL("user32")
@@ -115,7 +114,9 @@ def state():
     return {"supported": bool(info.value & 1), "on": bool(info.value & 2)}
 
 
-def set_enabled(on, wait=3.5):
+def set_enabled(on):
+    """Ask Windows to switch HDR. The switch takes about a second; the caller confirms it with state() (main.py
+    waits for it outside the worker thread, so other calls aren't held up meanwhile)."""
     adapter, tid = _target()
     st = SET_STATE(HEADER(SET_HDR_STATE, sizeof(SET_STATE), adapter, tid), 1 if on else 0)
     if _user32.DisplayConfigSetDeviceInfo(byref(st)) != 0:
@@ -123,12 +124,4 @@ def set_enabled(on, wait=3.5):
         rc = _user32.DisplayConfigSetDeviceInfo(byref(st))
         if rc:
             raise OSError(rc, "DisplayConfigSetDeviceInfo failed")
-    deadline = time.monotonic() + wait  # the mode switch takes a moment; confirm it happened
-    while True:
-        now = state()
-        if now["on"] == bool(on) or time.monotonic() > deadline:
-            break
-        time.sleep(0.25)
-    if now["on"] != bool(on):
-        raise RuntimeError("Windows did not switch HDR " + ("on" if on else "off"))
-    return now
+    return state()

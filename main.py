@@ -135,7 +135,21 @@ class Plugin:
         return await self._call("perf_state", timeout=10)
 
     async def set_hdr(self, on):
-        return await self._call("set_hdr", bool(on), timeout=15)
+        """Switch on the worker, then wait here (up to 3.5 s) until Windows reports the new state: the switch takes
+        about a second, and brightness / volume calls must not queue behind it."""
+        on = bool(on)
+
+        async def go():
+            now = await self._run("set_hdr", on, timeout=10)
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + 3.5
+            while now["on"] != on and loop.time() < deadline:
+                await asyncio.sleep(0.25)
+                now = await self._run("hdr_state", timeout=5)
+            if now["on"] != on:
+                raise RuntimeError("Windows did not switch HDR " + ("on" if on else "off"))
+            return now
+        return await self._guard("set_hdr", go())
 
     async def setup_rtss(self):
         return await self._call("setup_rtss", timeout=15)

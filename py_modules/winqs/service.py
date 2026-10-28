@@ -376,6 +376,10 @@ class SystemService:
     def set_hdr(on):
         return hdr.set_enabled(bool(on))
 
+    @staticmethod
+    def hdr_state():
+        return hdr.state()
+
     def _limiter(self):
         """RTSS once it is set up (works for every graphics API); the Intel driver limiter otherwise (DX9/DX11 only
         on current drivers). With RTSS in charge the driver limit is switched off so two limiters never stack."""
