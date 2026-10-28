@@ -19,12 +19,15 @@ class LocationBlocked(OSError):
 class DOT11_SSID(ctypes.Structure):
     _fields_ = [("uSSIDLength", wintypes.ULONG), ("ucSSID", ctypes.c_ubyte * 32)]
 
+    def raw(self):
+        return bytes(self.ucSSID[: self.uSSIDLength])
+
     def text(self):
-        raw = bytes(self.ucSSID[: self.uSSIDLength])
+        """For display. A non-UTF-8 SSID is shown as latin-1, so a profile needs raw() (see profile_xml)."""
         try:
-            return raw.decode("utf-8")
+            return self.raw().decode("utf-8")
         except UnicodeDecodeError:
-            return raw.decode("latin-1")
+            return self.raw().decode("latin-1")
 
 
 class WLAN_INTERFACE_INFO(ctypes.Structure):
@@ -263,6 +266,7 @@ class Wlan:
                     continue
                 entry = {
                     "ssid": ssid,
+                    "ssid_hex": net.dot11Ssid.raw().hex().upper(),  # the exact bytes, for a new profile
                     "signal": signal_bucket(int(net.wlanSignalQuality)),
                     "secured": bool(net.bSecurityEnabled),
                     "auth": int(net.dot11DefaultAuthAlgorithm),
@@ -322,15 +326,26 @@ class Wlan:
             _wlan.WlanFreeMemory(p)
 
 
-def profile_xml(ssid, auth, cipher, password):
-    """WLAN profile for an open / WPA-PSK / WPA2-PSK / WPA3-SAE network."""
-    hex_ssid = ssid.encode("utf-8").hex().upper()
+def _xml_text(s):
+    """No control characters: XML 1.0 can't carry them, and WlanSetProfile would refuse the profile."""
+    return "".join(ch for ch in s if ch >= " ")
+
+
+def profile_name(ssid):
+    """Name of the profile the plugin creates for a network (connect / delete use the same name)."""
+    return _xml_text(ssid) or "Wi-Fi"
+
+
+def profile_xml(ssid, ssid_hex, auth, cipher, password, name=None):
+    """WLAN profile for an open / WPA-PSK / WPA2-PSK / WPA3-SAE network, named `name` (default profile_name(ssid)).
+    The SSID goes in as its raw bytes (ssid_hex): the display text of a non-UTF-8 name would encode to different
+    bytes, i.e. another network."""
     authentication = AUTH[auth][0]
     if auth == 1:
         encryption, key = "none", ""
     else:
         encryption = "TKIP" if cipher == 2 else "AES"
-        pwd = "".join(ch for ch in (password or "") if ch >= " ")  # no control characters in the XML
+        pwd = _xml_text(password or "")
         # 64 hex digits is a raw key, 8-63 characters a passphrase (WPA rules)
         raw = len(pwd) == 64 and all(c in "0123456789abcdefABCDEF" for c in pwd)
         key = ("<sharedKey><keyType>%s</keyType><protected>false</protected>"
@@ -344,4 +359,4 @@ def profile_xml(ssid, auth, cipher, password):
         "<MSM><security><authEncryption><authentication>%s</authentication>"
         "<encryption>%s</encryption><useOneX>false</useOneX></authEncryption>%s</security></MSM>"
         "</WLANProfile>"
-    ) % (escape(ssid), hex_ssid, escape(ssid), authentication, encryption, key)
+    ) % (escape(_xml_text(name or "") or profile_name(ssid)), ssid_hex, escape(_xml_text(ssid)), authentication, encryption, key)

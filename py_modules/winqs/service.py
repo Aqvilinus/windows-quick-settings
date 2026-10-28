@@ -12,7 +12,8 @@ from . import audio, battery, brightness, bt, btaudio, display, hdr, nightlight,
 from .framelimit import IntelFrameLimit
 from .rtss import RtssFrameLimit
 from .com import init_worker
-from .wlan import SUPPORTED_NEW, WLAN_PROFILE_GROUP_POLICY, LocationBlocked, Wlan, profile_xml, reason_text
+from .wlan import (SUPPORTED_NEW, WLAN_PROFILE_GROUP_POLICY, LocationBlocked, Wlan, profile_name, profile_xml,
+                   reason_text)
 
 # WLAN errors after which the client handle is useless (service restarted, RPC broken): reopen once.
 WLAN_REOPEN_ERRORS = {6, 1702, 1722, 1726, 1727, 1753}
@@ -236,10 +237,12 @@ class SystemService:
                                                      "security": net["security"]}}
                 if net["secured"] and not password:
                     return {"done": True, "result": {"ok": False, "reason": "password_required"}}
-                wl.set_profile(guid, profile_xml(ssid, net["auth"], net["cipher"], password))
+                # a new password rewrites the saved profile itself (its name can differ from the SSID)
+                name = profile if profile is not None else profile_name(ssid)
+                wl.set_profile(guid, profile_xml(ssid, net["ssid_hex"], net["auth"], net["cipher"], password, name))
                 # only a profile the plugin added is removed again on failure, never an existing one
                 created = profile is None
-                profile = ssid
+                profile = name
             wl.clear_connection_result(ssid)
             wl.connect_profile(guid, profile)
             return {"done": False, "created": created, "profile": profile, "secured": net["secured"],
