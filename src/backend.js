@@ -41,7 +41,7 @@ export async function call(fn, ...args) {
 // The first call runs fn; its result (null on a miss or an error) is kept for the plugin's lifetime.
 export function lazy(fn, warning) {
     let value;
-    return () => {
+    const get = () => {
         if (value === undefined) {
             value = null;
             try { value = fn() ?? null; }
@@ -49,4 +49,12 @@ export function lazy(fn, warning) {
         }
         return value;
     };
+    // Look it up ahead of time, keeping only a hit: a miss is not remembered, so something Steam loads later is still
+    // found on first use.
+    get.warm = () => {
+        if (value !== undefined) return;
+        try { value = fn() ?? undefined; }
+        catch { }
+    };
+    return get;
 }

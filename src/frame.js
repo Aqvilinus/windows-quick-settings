@@ -12,7 +12,7 @@ import { Row, chevron, clamp, pressable, showModalHere, spinner, steamIcons } fr
 // the running game's one (set_active_game in service.py). The heading row and its explainer are Steam Deck's own
 // markup and strings (QuickAccess_Tab_Perf_*) with Steam's classes; Steam's own components for them read Steam's
 // SteamOS-only profile store, so they can't be used as they are.
-const deckPerfParts = lazy(() => {
+export const deckPerfParts = lazy(() => {
     const css = DFL.findModule((m) => m && typeof m === "object" && m.PerfProfileInfo && m.SubHeading && m.GameName);
     const AppImage = DFL.findModuleExport((e) => {
         const t = e && (e.type || e);

@@ -67,7 +67,7 @@ function perfLevelNames() {
 // plain "return <jsx>" functions without state, so their output can be expanded and filtered. Q is recognised by
 // rendering only Steam's FPS corner/contrast row components, found by their localization tokens. Anything
 // unexpected -> Steam's panel is rendered untouched.
-const steamFpsRowTypes = lazy(() => {
+export const steamFpsRowTypes = lazy(() => {
     const has = (tok) => (e) => typeof e === "function" && Function.prototype.toString.call(e).includes(tok);
     const corner = DFL.findModuleExport(has("QuickAccess_Tab_Perf_FPS_Corner"));
     const contrast = DFL.findModuleExport(has("QuickAccess_Tab_Perf_FPS_Contrast"));

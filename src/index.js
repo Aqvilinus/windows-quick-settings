@@ -14,10 +14,12 @@ import manifest from "@decky/manifest";
 import * as DFL from "@decky/ui";
 import { Fragment, jsx } from "react/jsx-runtime";
 import { LOG, be, call, lazy } from "./backend.js";
+import { deckPerfParts } from "./frame.js";
+import { steamFpsRowTypes } from "./overlay.js";
 import { injectStatus, installPatch, setStatus, stopped, uninstallPatch } from "./qam.js";
 import { errText } from "./strings.js";
-import { icon } from "./ui.js";
-import { openWifiModal, startPortalWatch, stopPortalWatch } from "./wifi.js";
+import { icon, steamIcons } from "./ui.js";
+import { openWifiModal, startPortalWatch, steamPortalDialog, stopPortalWatch } from "./wifi.js";
 
 // ---------------------------------------------------------------- "<model> Display Scaling" -> "Display Scaling"
 // Steam titles its own display-scaling section with the panel's model name using this
@@ -199,6 +201,10 @@ export default definePlugin(() => {
         }
     };
     tryInstall(0);
+    // The first scan of Steam's ~40k webpack exports costs ~0.1 s: do these lookups while idle, not on the first open
+    // of a tab. warm() keeps only hits, so a lookup that misses now still runs on first use.
+    const warmUp = setTimeout(() => [steamIcons, steamFpsRowTypes, deckPerfParts, steamPortalDialog].forEach((f) => f.warm()),
+        5000);
     return {
         name: manifest.name,
         titleView: jsx("div", { className: DFL.staticClasses?.Title, children: manifest.name }),
@@ -206,6 +212,7 @@ export default definePlugin(() => {
         content: jsx(Fragment, {}),
         icon: icon("WiFi"),
         onDismount() {
+            clearTimeout(warmUp);
             uninstallPatch();
             restoreScalingSection();
             stopMenuHotkeys();

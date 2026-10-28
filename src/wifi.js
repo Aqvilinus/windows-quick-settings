@@ -60,7 +60,7 @@ let connectivitySeq = 0;
 let connectivityReg = null;
 const steamNetStore = lazy(() => DFL.findModule((m) => m?.SystemNetworkStore)?.SystemNetworkStore);
 // fn(ownerWindow, manualUrl?) that shows Steam's CaptivePortalDialog (found by its prop name, not a minified id)
-const steamPortalDialog = lazy(() => DFL.findModuleExport((e) => {
+export const steamPortalDialog = lazy(() => DFL.findModuleExport((e) => {
     if (typeof e !== "function") return false;
     const src = Function.prototype.toString.call(e);
     return src.length < 400 && src.includes("strManualCaptivePortalURL");
