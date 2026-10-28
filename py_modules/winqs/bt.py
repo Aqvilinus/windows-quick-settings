@@ -244,6 +244,7 @@ class Pairing:
         self._op = None
         self._request = None  # (args, deferral) waiting for the user's answer
         self._thread = None
+        self._cancelled = False  # cancel() was called during the current pairing
 
     def state(self):
         with self._lock:
@@ -254,6 +255,7 @@ class Pairing:
             if self._thread and self._thread.is_alive():
                 raise RuntimeError("a pairing is already in progress")
             self._state = {"state": "pairing", "id": device_id}
+            self._cancelled = False
             self._thread = threading.Thread(target=self._run, args=(device_id,), name="winqs-bt-pair", daemon=True)
             self._thread.start()
 
@@ -276,6 +278,7 @@ class Pairing:
     def cancel(self):
         self.answer(False)
         with self._lock:
+            self._cancelled = True  # _run reports the outcome as cancelled, whatever error the aborted call raises
             op = self._op
         if op is not None:
             try:
@@ -332,9 +335,10 @@ class Pairing:
             self._set(state="done" if ok else ("cancelled" if cancelled else "failed"), status=status.name)
         except Exception as e:  # noqa: BLE001 - a cancelled operation raises too
             with self._lock:
-                was_cancel = self._op is not None and self._state.get("state") in ("pairing", "confirm")
-            self._log("bluetooth pairing failed: %r" % e)
-            self._set(state="cancelled" if was_cancel and "cancel" in repr(e).lower() else "failed", status=str(e))
+                cancelled = self._cancelled
+            if not cancelled:
+                self._log("bluetooth pairing failed: %r" % e)
+            self._set(state="cancelled" if cancelled else "failed", status=str(e))
         finally:
             with self._lock:
                 self._op = None
