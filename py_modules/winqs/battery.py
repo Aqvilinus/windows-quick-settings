@@ -4,14 +4,16 @@ Battery.AggregateBattery combines all batteries the way the Windows battery icon
 (mW; positive while charging, negative while discharging) and the capacities (mWh).
 """
 import math
+import time
 
 from winrt.windows.devices.power import Battery
 from winrt.windows.system.power import BatteryStatus, PowerManager, PowerSupplyStatus
 
 CV_KNEE = 0.8      # Li-ion: about constant power up to ~80 % (CC), then constant voltage (CV) with a falling current
 CV_END = 0.05      # the charger stops when the power falls to about C/20
-SMOOTHING = 0.2    # weight of a new rate sample (polled every 2 s, so ~10 s to settle)
+SMOOTHING_S = 20   # time constant of the rate average: the same result however often the frontend polls
 _rate_avg = None   # smoothed charge rate in mW while charging
+_rate_time = 0.0
 
 
 def _cv_hours(gap_mwh, p_mw, full_mwh):
@@ -24,8 +26,13 @@ def _cv_hours(gap_mwh, p_mw, full_mwh):
 
 def _time_to_full(full_mwh, now_mwh, rate_mw):
     """Seconds to a full charge: the smoothed power up to the knee, then the CV taper."""
-    global _rate_avg
-    _rate_avg = rate_mw if _rate_avg is None else _rate_avg + SMOOTHING * (rate_mw - _rate_avg)
+    global _rate_avg, _rate_time
+    now = time.monotonic()
+    if _rate_avg is None:
+        _rate_avg = rate_mw
+    else:  # exponential average over time: a sample's weight grows with the time since the last one
+        _rate_avg += (1 - math.exp(-(now - _rate_time) / SMOOTHING_S)) * (rate_mw - _rate_avg)
+    _rate_time = now
     p = _rate_avg
     knee = CV_KNEE * full_mwh
     if now_mwh < knee:

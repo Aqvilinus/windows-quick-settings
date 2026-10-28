@@ -964,7 +964,7 @@ function useChargeTime(needed) {
             catch { }
         };
         poll();
-        const t = setInterval(poll, 2000);
+        const t = setInterval(poll, 10000); // shown in whole minutes; the backend averages the rate over time
         return () => { alive = false; clearInterval(t); setSec(null); };
     }, [visible]);
     return sec;
