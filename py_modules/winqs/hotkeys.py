@@ -113,9 +113,11 @@ class MenuHotkeys:
             overlays, self._pending_overlays = self._pending_overlays, None
         if overlays is None:
             return
+        # the frontend resends the list every 30 s: only overlays not resolved yet have their command line read
+        known = {opid: gpid for gpid, opid in self._games.items()}
         games = {}
         for opid in overlays:
-            gpid = game_pid_of_overlay(opid)
+            gpid = known.get(opid) or game_pid_of_overlay(opid)
             if gpid:
                 games[gpid] = opid
         self._games = games
