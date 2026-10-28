@@ -486,7 +486,7 @@ async function connectNetwork(n, password) {
 // invisible there and the gamepad would stay in the overlay.
 function modalParent() {
     try {
-        const nav = window.FocusNavController;
+        const nav = DFL.getFocusNavController();
         const w = (nav?.GetActiveContext?.() || nav?.FindAnActiveContext?.())?.m_rootWindow;
         if (w && !w.closed) return w;
     }
@@ -555,7 +555,7 @@ async function signInIfNeeded() {
     if (!recheckConnectivity()) return;
     const until = Date.now() + 10000;
     while (Date.now() < until) {
-        await new Promise((r) => setTimeout(r, 400));
+        await DFL.sleep(400);
         const c = connectivity();
         if (connectivitySeq !== seq && c && !c.bChecking) {
             if (c.eConnectivityTestResult === CONNECTIVITY_CAPTIVE_PORTAL) openSignInPage();
@@ -700,7 +700,7 @@ function BtDeviceRow({ device: d }) {
         const connect = !isConnected;
         runAction(key, connect, async () => {
             await call(be.bluetoothAudio, d.name, connect);
-            await new Promise((r) => setTimeout(r, 2500));
+            await DFL.sleep(2500);
         });
     };
     return jsx(DFL.Field, {
