@@ -1339,12 +1339,15 @@ function useInjectionOff(statusKey) {
     useEffect(() => { if (!off) setStatus(statusKey, "active"); }, [off]);
     return off;
 }
+// Steam re-renders the Quick Access menu often; our sections read the store themselves and only need `active`
+const QuickSettingsMemo = R.memo(QuickSettings), PerfSectionMemo = R.memo(PerfSection),
+    FrameSectionMemo = R.memo(FrameSection);
 function InjectedPanel({ original, visible }) {
     const off = useInjectionOff("settings");
     // the same two child slots in every state, so Steam's own panel never remounts
     return jsxs(Fragment, {
         children: [
-            off ? null : jsx(ErrorBoundary, { children: jsx(QuickSettings, { active: visible }) }),
+            off ? null : jsx(ErrorBoundary, { children: jsx(QuickSettingsMemo, { active: visible }) }),
             original,
         ],
     });
@@ -1362,8 +1365,8 @@ function InjectedPerfPanel({ original, visible }) {
         children: jsxs(Fragment, {
             children: [
                 off ? original : r.tree,
-                off ? null : jsx(ErrorBoundary, { children: jsx(PerfSection, { active: visible }) }),
-                off ? null : jsx(ErrorBoundary, { children: jsx(FrameSection, { active: visible }) }),
+                off ? null : jsx(ErrorBoundary, { children: jsx(PerfSectionMemo, { active: visible }) }),
+                off ? null : jsx(ErrorBoundary, { children: jsx(FrameSectionMemo, { active: visible }) }),
             ],
         }),
     });
