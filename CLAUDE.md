@@ -23,7 +23,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - `brightness.py`, `nightlight.py`, `hdr.py`, `display.py`, `battery.py`: brightness, Night light, HDR, the current refresh rate (read only, the Frame Limit slider's top), battery (`Windows.Devices.Power`, pywinrt).
   - `rtss.py` + `../setup_rtss.ps1`, `framelimit.py`: frame limit through RTSS; Intel IGCL fallback.
   - `hotkeys.py`: Ctrl+1 / Ctrl+2 for Steam's side menus in games.
-- `dist/index.js`: the whole frontend, hand-written, no build step, split by `// ------` banners.
+- `dist/index.js`: the whole frontend, hand-written, no build step, split by `// ------` banners. Shared helpers near the top: `lazy()` for one-time Steam module lookups, `withPending` / `runAction` / `act` for backend actions, `dialog()`, `pressable()`, `useStableOrder()`.
 
 ## Workflow
 
@@ -60,6 +60,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - The wrappers call Steam's M / B (found by `BatterySectionContainer` / `BatteryProjectedValue` in their source). Steam's look is kept as is.
   - While charging Windows gives Steam no time to full, so B shows "?h ?m". Only that is replaced, in Steam's `%1$sh %2$sm` format, with `full_seconds` from `battery.py`: smoothed rate, constant power to 80 %, then an exponential CV taper until C/20.
   - Any mismatch leaves that part as Steam renders it.
+- **Icons:** Steam's own icon components (`icon("WiFi")`, the module that exports `Information`; it has 490 icons, list them over CDP). They carry no size, so `SteamIcon` puts them in a 1em box. No hand-drawn SVGs. `WirelessNetwork` takes `strength` 1–4, `AudioVolumeIcon` takes `flVolume` 0–1, `Lock` takes `locked`.
 - **Read-only rows** must not be focusable (`DFL.Field` always is; an empty nav node breaks navigation). Use `DFL.gamepadDialogClasses` markup. CSS hiding doesn't remove an element from navigation.
 - **Dialogs:** use `showModalHere()` (active nav context's root window). `DFL.showModal` opens behind the game.
 - **Footer hints:** the QAM footer is ~350 px wide. A long `onOptionsActionDescription` wraps Steam's own hint ("Adjust slider") onto a second row, so use short Steam tokens (`L("Settings")`).
@@ -78,6 +79,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - Paired list: DeviceWatchers over the "paired" selectors with `System.Devices.Aep.IsConnected`, kept running; a poll reads the snapshot (0 ms). It includes LE devices.
   - Search: DeviceWatchers over Windows' own `GetDeviceSelectorFromPairingState(False)` selectors (classic + LE), AEP kind; stops after 30 s or when the dialog closes.
   - Pairing on its own thread with `DeviceInformationCustomPairing`: ConfirmOnly / DisplayPin accepted at once, ConfirmPinMatch answered later through the request's deferral. ProvidePin isn't supported.
+  - The PIN / code dialog is closed by the next pairing step and by closing "Add Device" (`showModal(...).Close()` is idempotent and doesn't fire `onCancel`).
   - Steam on Windows has no Bluetooth API (`SteamClient.System.Bluetooth` is absent).
 - **WLAN:**
   - Error 5 means Location is off.
