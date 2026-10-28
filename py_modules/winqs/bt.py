@@ -10,6 +10,7 @@
   user's answer accepts or declines it.
 - Removal: DeviceInformationPairing.UnpairAsync.
 """
+import contextlib
 import re
 import threading
 import time
@@ -31,6 +32,7 @@ P_CONNECTED = "System.Devices.Aep.IsConnected"
 PROPS = [P_CATEGORY, P_MAJOR]
 PAIRED_PROPS = [P_CATEGORY, P_MAJOR, P_CONNECTED]
 SCAN_SECONDS = 30
+RESTART_EVERY = 30  # s; at most this often a broken paired-devices watcher is started again
 PIN_SECONDS = 60
 # Major device classes of classic Bluetooth
 MAJOR = {1: "computer", 2: "phone", 3: "network", 4: "audio", 5: "peripheral", 6: "imaging", 7: "wearable", 8: "toy",
@@ -98,57 +100,72 @@ class _Watch:
 
     def __init__(self, selectors, props, log=None):
         self._selectors, self._props = selectors, props
-        self._log = log or (lambda *a: None)
         self._lock = threading.Lock()
-        self._watchers = []
+        self._watchers = []   # [(watcher, [(remove_fn, token), ...])]
+        self._gen = 0         # events from watchers of an older start are ignored
         self._infos = {}  # id -> DeviceInformation
         self._completed = 0
         self._first_pass = threading.Event()
 
     def _start(self):
         """Call with the lock held."""
+        self._gen += 1
+        gen = self._gen
         self._infos.clear()
         self._completed = 0
         self._first_pass.clear()
         for selector in self._selectors():
             w = DeviceInformation.create_watcher(selector, self._props, AEP)
-            w.add_added(self._added)
-            w.add_updated(self._updated)
-            w.add_removed(self._removed)
-            w.add_enumeration_completed(self._enumerated)
-            self._watchers.append(w)
-        for w in self._watchers:
+            tokens = []
+            for name, fn in (("added", self._added), ("updated", self._updated), ("removed", self._removed),
+                             ("enumeration_completed", self._enumerated)):
+                tokens.append((getattr(w, "remove_" + name),
+                               getattr(w, "add_" + name)(lambda _w, arg, fn=fn: fn(gen, arg))))
+            self._watchers.append((w, tokens))
+        for w, _ in self._watchers:
             w.start()
+
+    @staticmethod
+    def _detach(watchers):
+        """Unsubscribe and stop watchers taken out of self._watchers (call without the lock: Windows may be
+        running one of our handlers, which needs it)."""
+        for w, tokens in watchers:
+            for remove, token in tokens:
+                with contextlib.suppress(Exception):
+                    remove(token)
+            with contextlib.suppress(Exception):  # already stopped / aborted
+                w.stop()
 
     def stop(self):
         with self._lock:
             watchers, self._watchers = self._watchers, []
-        for w in watchers:
-            try:
-                w.stop()
-            except Exception:  # noqa: BLE001 - already stopped
-                pass
+            self._gen += 1
+        self._detach(watchers)
 
     def _snapshot(self):
         with self._lock:
             return list(self._infos.values())
 
-    def _added(self, watcher, info):
+    def _added(self, gen, info):
         with self._lock:
-            self._infos[info.id] = info
+            if gen == self._gen:
+                self._infos[info.id] = info
 
-    def _updated(self, watcher, update):
+    def _updated(self, gen, update):
         with self._lock:
-            info = self._infos.get(update.id)
+            info = self._infos.get(update.id) if gen == self._gen else None
             if info is not None:
                 info.update(update)
 
-    def _removed(self, watcher, update):
+    def _removed(self, gen, update):
         with self._lock:
-            self._infos.pop(update.id, None)
+            if gen == self._gen:
+                self._infos.pop(update.id, None)
 
-    def _enumerated(self, watcher, _):
+    def _enumerated(self, gen, _):
         with self._lock:
+            if gen != self._gen:
+                return
             self._completed += 1
             if self._completed >= len(self._watchers):
                 self._first_pass.set()
@@ -169,15 +186,24 @@ class PairedDevices(_Watch):
 
     def __init__(self, log=None):
         super().__init__(_selectors(True), PAIRED_PROPS, log)
+        self._restarted = -RESTART_EVERY
 
     def devices(self):
+        """Wait for the first pass only right after (re)starting the watchers: the worker thread serves every other
+        call too, so a watcher that never completes must not stall each poll."""
+        stale, started = [], False
         with self._lock:
-            running = [w for w in self._watchers if w.status in (DeviceWatcherStatus.STARTED,
-                                                                 DeviceWatcherStatus.ENUMERATION_COMPLETED)]
-            if len(running) != len(self._watchers) or not self._watchers:
-                self._watchers = []  # never started, or stopped / aborted by Windows: start over
+            running = [w for w, _ in self._watchers if w.status in (DeviceWatcherStatus.STARTED,
+                                                                    DeviceWatcherStatus.ENUMERATION_COMPLETED)]
+            broken = len(running) != len(self._watchers) or not self._watchers
+            if broken and time.monotonic() - self._restarted > RESTART_EVERY:
+                stale, self._watchers = self._watchers, []  # never started, or stopped / aborted by Windows
+                self._restarted = time.monotonic()
                 self._start()
-        self._first_pass.wait(3)
+                started = True
+        self._detach(stale)
+        if started:
+            self._first_pass.wait(3)
         out = [{"id": i.id, "address": _address(i.id), "name": i.name or _address(i.id), "connected": _connected(i),
                 "type": _device_type(i)} for i in self._snapshot()]
         out.sort(key=lambda d: (not d["connected"], d["name"].lower()))
