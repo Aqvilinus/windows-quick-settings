@@ -1,8 +1,10 @@
 """All system calls run on one dedicated thread (one COM/WinRT apartment, one wlan handle)."""
+import base64
 import concurrent.futures
 import contextlib
 import json
 import os
+import re
 import subprocess
 import time
 
@@ -19,6 +21,15 @@ NETWORKS_MAX_AGE = 20   # s; with notifications the list is re-read on changes, 
 
 
 FLOWS = ("output", "input")
+
+SID_RE = re.compile(r"S-1-\d+(-\d+)+")
+# Read once at backend start (see setup_rtss): the elevated step never runs a file from the user-writable folder.
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_rtss.ps1"), encoding="utf-8-sig") as _f:
+    SETUP_RTSS_SCRIPT = _f.read()
+
+
+def _system32(*parts):
+    return os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", *parts)
 
 
 def _collect(errors, key, fn, default=None):
@@ -385,16 +396,21 @@ class SystemService:
             self._rtss.ensure_running()
 
     def setup_rtss(self):
-        """Start the one-time RTSS setup elevated. Windows shows its UAC prompt; returns without waiting."""
-        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_rtss.ps1")
-        sid = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True,
+        """Start the one-time RTSS setup elevated. Windows shows its UAC prompt; returns without waiting.
+
+        The elevated PowerShell gets the script text itself (-EncodedCommand, read when the backend started), not a
+        path: the plugin folder is user-writable, so a file run from there could be swapped just before the prompt."""
+        sid = subprocess.run([_system32("whoami.exe"), "/user", "/fo", "csv", "/nh"], capture_output=True, text=True,
                              creationflags=subprocess.CREATE_NO_WINDOW, timeout=10).stdout.strip().split(",")[-1].strip('"')
-        log = os.path.join(os.path.dirname(self.state_file), "setup_rtss.log")
-        args = ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%s" -UserSid %s -Log "%s" -RtssDir "%s"'
-                % (script, sid, log, rtss.DIR))
+        if not SID_RE.fullmatch(sid):
+            raise RuntimeError("could not read the user's SID")
+        command = "& {\n%s\n} -UserSid '%s'" % (SETUP_RTSS_SCRIPT, sid)
+        args = ("-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand "
+                + base64.b64encode(command.encode("utf-16-le")).decode("ascii"))
         self._rtss.forget_status()
+        powershell = _system32("WindowsPowerShell", "v1.0", "powershell.exe")
         try:
-            os.startfile("powershell.exe", "runas", args, None, 0)  # ShellExecute "runas": Windows' UAC prompt, hidden
+            os.startfile(powershell, "runas", args, None, 0)  # ShellExecute "runas": Windows' UAC prompt, hidden
         except OSError as e:
             raise OSError(e.errno, "the setup was not started (cancelled?)") from e
         return {"started": True}

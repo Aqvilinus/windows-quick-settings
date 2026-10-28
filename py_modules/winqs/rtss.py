@@ -42,12 +42,15 @@ def running():
     return any((p.info["name"] or "").lower() == "rtss.exe" for p in psutil.process_iter(["name"]))
 
 
+SCHTASKS = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "schtasks.exe")
+
+
 def _run(args, timeout=10):
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout, creationflags=subprocess.CREATE_NO_WINDOW)
 
 
 def task_exists():
-    return _run(["schtasks", "/query", "/tn", TASK]).returncode == 0
+    return _run([SCHTASKS, "/query", "/tn", TASK]).returncode == 0
 
 
 def profiles_writable():
@@ -110,7 +113,7 @@ class RtssFrameLimit:
 
     def ensure_running(self):
         if not running():
-            _run(["schtasks", "/run", "/tn", TASK])
+            _run([SCHTASKS, "/run", "/tn", TASK])
 
     def get(self):
         st = self.status()
