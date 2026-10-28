@@ -204,7 +204,8 @@ class Wlan:
                 self.interface_changed = True
             elif code in (ACM_SCAN_COMPLETE, ACM_SCAN_FAIL):
                 self.scan_done.set()
-            elif code in (ACM_CONNECTION_COMPLETE, ACM_CONNECTION_ATTEMPT_FAIL) and d.pData and                     d.dwDataSize >= ctypes.sizeof(WLAN_CONNECTION_NOTIFICATION_DATA):
+            elif code in (ACM_CONNECTION_COMPLETE, ACM_CONNECTION_ATTEMPT_FAIL) and d.pData \
+                    and d.dwDataSize >= ctypes.sizeof(WLAN_CONNECTION_NOTIFICATION_DATA):
                 c = ctypes.cast(d.pData, POINTER(WLAN_CONNECTION_NOTIFICATION_DATA)).contents
                 ok = code == ACM_CONNECTION_COMPLETE and c.wlanReasonCode == 0
                 with self._conn_lock:
