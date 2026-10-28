@@ -6,7 +6,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 
 - OneXPlayer 3 (Core Ultra, Arc B390), Windows 11 in Xbox full-screen mode, home app OmniConsole. The panel is 1920x1200 with VRR, 30–144 Hz.
 - OneXConsole (vendor app, elevated) owns TDP, fans, buttons and its own RTSS OSD.
-- Decky Loader 3.3.1 for Windows (official release exe, installed 2026-10-28 over the Decky Manager build; the old exe is in `homebrew\services-backup-v3.3.0-py311`), unelevated, started by Decky Manager. Settings are in `%USERPROFILE%\homebrew\settings\windows-quick-settings`, logs in `homebrew\logs\windows-quick-settings`.
+- Decky Loader 3.3.1 for Windows (official release exe, installed 2026-10-28 over the Decky Manager build; the old exe is in `%USERPROFILE%\homebrew\services-backup-v3.3.0-py311`), unelevated, started by Decky Manager. Settings are in `%USERPROFILE%\homebrew\settings\windows-quick-settings`, logs in `%USERPROFILE%\homebrew\logs\windows-quick-settings`.
 - The backend runs on Decky's frozen Python 3.14 (no pip). `py_modules/` is on `sys.path` (appended by Decky): the plugin's own `winqs/` package and `LICENSES/` are in git; the third-party packages are installed there by `scripts/build.py` from `requirements.txt` and are git-ignored. `psutil` is abi3, so it loads `python3.dll`; Decky's exe has none, the build adds the one from python.org's embeddable package of the same Python version. The rest uses `ctypes` for Win32 / vendor DLLs.
 - Steam CEF DevTools: `http://127.0.0.1:8080`. Decky runs in the `SharedJSContext` target.
 
@@ -22,7 +22,8 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 ## Workflow
 
 - Build: `python scripts/build.py` (options in its docstring). The zip's top folder must stay `windows-quick-settings/`: Decky keys settings and logs by folder name. `--local` refreshes this checkout's `py_modules/` (Decky loads the checkout); locked DLLs of the running plugin are renamed `*.old` and deleted by the next build. Restart the plugin's backend afterwards.
-- Node: portable v24 LTS in `C:\Users\Ivan\Tools\node` (not on PATH; `.nvmrc` = 24), pnpm through corepack (`packageManager` in package.json). pnpm 12 refuses packages younger than a day (minimumReleaseAge).
+- Python for local builds and checks: 3.14, the version Decky runs plugins on (winget `Python.Python.3.14`, per-user, on the user PATH).
+- Node: portable v24 LTS in `%USERPROFILE%\Tools\node` (not on PATH; `.nvmrc` = 24), pnpm through corepack (`packageManager` in package.json). pnpm 12 refuses packages younger than a day (minimumReleaseAge).
 - Releases: run the manual `Release` workflow on GitHub with a version.
 - Checks (CI runs them too): `python -I -m unittest discover -s tests`, `ruff check main.py scripts py_modules/winqs tests` (rules in `ruff.toml`: errors and likely bugs only) and `actionlint` for the workflows; both are installed with winget.
 - Testing on the device over Steam's CEF DevTools (reload the plugin, call the backend, open QAM tabs, gamepad buttons): see the `steam-cdp` skill.
