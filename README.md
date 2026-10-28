@@ -70,8 +70,9 @@ python scripts/build.py [--version 0.2.0] [--python 3.14] [--local]
 The script runs `pnpm install --frozen-lockfile` and `pnpm run build`, installs `requirements.txt` for Windows and
 Decky's Python version into the archive's `py_modules/`, adds `python3.dll` for psutil, and writes
 `out/windows-quick-settings-v<version>.zip`. `--local` also refreshes `py_modules/` in the checkout, for a checkout that
-Decky loads directly (restart Decky afterwards). The GitHub workflow runs the same script; started by hand with a
-version, it also tags the release and attaches the zip to a draft GitHub release.
+Decky loads directly (restart Decky afterwards). GitHub Actions runs the same script on every push (`Build`). To publish a version, run the `Release` workflow by hand
+(Actions → Release → Run workflow) with the version, e.g. `0.2.0`: it builds the zip, commits the version to
+`package.json`, tags `v0.2.0` and publishes a GitHub release with the zip.
 
 ## License
 
