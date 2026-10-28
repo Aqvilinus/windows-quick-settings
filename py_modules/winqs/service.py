@@ -48,7 +48,7 @@ class SystemService:
         self.state_file = os.path.join(state_dir, "state.json")
         self.log = log or (lambda *a: None)
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="winqs-sys",
-                                                          initializer=init_worker)
+                                                          initializer=self._init_worker)
         self._wlan = None
         self._guid = None
         self._nets = []
@@ -63,6 +63,14 @@ class SystemService:
         self._bt_pairing = bt.Pairing(self.log)
 
     # ---- infrastructure -------------------------------------------------------------
+    def _init_worker(self):
+        """A failing initializer would break the pool for good (every call: BrokenThreadPool until Decky restarts).
+        Log it instead; the calls that need COM then report their own errors."""
+        try:
+            init_worker()
+        except Exception as e:  # noqa: BLE001
+            self.log("worker thread set-up failed: %r" % e)
+
     def submit(self, fn, *args):
         return self.pool.submit(fn, *args)
 

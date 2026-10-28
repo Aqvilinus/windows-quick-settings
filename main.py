@@ -12,6 +12,14 @@ from winqs.hotkeys import MenuHotkeys  # py_modules/winqs; Decky puts py_modules
 from winqs.service import SystemService
 
 
+def _log_failure(what):
+    """done-callback for work that nobody awaits: its exception would otherwise vanish."""
+    def done(fut):
+        if not fut.cancelled() and fut.exception() is not None:
+            decky.logger.error("%s failed: %r", what, fut.exception())
+    return done
+
+
 class Plugin:
     svc = None
     hotkeys = None
@@ -174,7 +182,8 @@ class Plugin:
     def _on_hotkey(self, menu, overlay_pid=None):
         emit = getattr(decky, "emit", None)
         if emit and self.loop:
-            asyncio.run_coroutine_threadsafe(emit("winqs_menu_hotkey", menu, overlay_pid), self.loop)
+            fut = asyncio.run_coroutine_threadsafe(emit("winqs_menu_hotkey", menu, overlay_pid), self.loop)
+            fut.add_done_callback(_log_failure("menu hotkey event"))
 
     async def menu_hotkey_test(self, menu, overlay_pid=None):
         """Diagnostics: the same path as a real hotkey press, fired from another thread."""
@@ -190,9 +199,9 @@ class Plugin:
         except (TypeError, ValueError):
             return {"ok": False, "error": "overlay pids must be numbers"}
         self.hotkeys.set_overlays(pids)
-        if pids:
-            self._service().submit(self.svc.rtss_keepalive)  # fire and forget, on the worker
-        await asyncio.sleep(0.05)
+        if pids:  # on the worker, not awaited; a failure is logged
+            self._service().submit(self.svc.rtss_keepalive).add_done_callback(_log_failure("rtss_keepalive"))
+        # for diagnostics only (the UI ignores it): the hotkey thread applies the new list a moment later
         return {"ok": True, "result": self.hotkeys.status()}
 
     # ---- lifecycle --------------------------------------------------------------------
