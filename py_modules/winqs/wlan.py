@@ -276,11 +276,15 @@ class Wlan:
                 old = best.get(ssid)
                 if old is None:
                     best[ssid] = entry
-                else:  # merge the profile entry and the plain entry of the same SSID
+                else:  # merge the profile entry and the plain entries of the same SSID
                     old["connected"] = old["connected"] or entry["connected"]
-                    if entry["known"] and not old["known"]:
-                        old["known"], old["profile"] = True, entry["profile"]
                     old["signal"] = max(old["signal"], entry["signal"])
+                    # The security comes from the entry that matched the saved profile, else from a secured entry:
+                    # an open access point with the same name must not decide how a saved WPA network is rewritten.
+                    if (entry["known"] and not old["known"]) or \
+                            (entry["known"] == old["known"] and entry["secured"] and not old["secured"]):
+                        for k in ("known", "profile", "secured", "auth", "security", "cipher", "can_add"):
+                            old[k] = entry[k]
         finally:
             _wlan.WlanFreeMemory(p)
         return sorted(best.values(), key=lambda e: (not e["connected"], not e["known"], -e["signal"], e["ssid"].lower()))

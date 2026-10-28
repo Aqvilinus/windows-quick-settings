@@ -227,6 +227,10 @@ class SystemService:
             created = False
             profile = net["profile"] if net["known"] else None
             if profile is None or password:
+                if profile is not None and not net["secured"]:
+                    # a new password for a saved network: never rewrite its profile as an open one
+                    return {"done": True, "result": {"ok": False, "reason": "unsupported_security",
+                                                     "security": net["security"]}}
                 if net["auth"] not in SUPPORTED_NEW:
                     return {"done": True, "result": {"ok": False, "reason": "unsupported_security",
                                                      "security": net["security"]}}
