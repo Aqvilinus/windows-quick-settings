@@ -8,6 +8,8 @@ IOCTL on \\\\.\\LCD, which reflects changes made by other tools.
 import ctypes
 from ctypes import POINTER, byref, c_void_p, wintypes
 
+from winrt.windows.system.power import PowerManager, PowerSupplyStatus
+
 from .com import GUID
 
 _powr = ctypes.WinDLL("powrprof")
@@ -30,20 +32,9 @@ _k32.LocalFree.argtypes = [c_void_p]
 _k32.LocalFree.restype = c_void_p
 
 
-class SYSTEM_POWER_STATUS(ctypes.Structure):
-    _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte), ("BatteryLifePercent", ctypes.c_ubyte),
-                ("SystemStatusFlag", ctypes.c_ubyte), ("BatteryLifeTime", wintypes.DWORD), ("BatteryFullLifeTime", wintypes.DWORD)]
-
-
-_k32.GetSystemPowerStatus.argtypes = [POINTER(SYSTEM_POWER_STATUS)]
-_k32.GetSystemPowerStatus.restype = wintypes.BOOL
-
-
 def _on_ac():
-    s = SYSTEM_POWER_STATUS()
-    if not _k32.GetSystemPowerStatus(byref(s)):
-        return True
-    return s.ACLineStatus != 0
+    """The AC and battery brightness values are stored separately; a weak charger still counts as AC."""
+    return PowerManager.power_supply_status != PowerSupplyStatus.NOT_PRESENT
 
 
 def _active_scheme():
