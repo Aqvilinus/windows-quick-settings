@@ -10,7 +10,6 @@ _wlan = ctypes.WinDLL("wlanapi")
 
 ERROR_SUCCESS = 0
 ERROR_ACCESS_DENIED = 5
-ERROR_INVALID_STATE = 5023
 
 
 class LocationBlocked(OSError):
@@ -34,34 +33,6 @@ class WLAN_INTERFACE_INFO(ctypes.Structure):
 
 class WLAN_INTERFACE_INFO_LIST(ctypes.Structure):
     _fields_ = [("dwNumberOfItems", wintypes.DWORD), ("dwIndex", wintypes.DWORD), ("InterfaceInfo", WLAN_INTERFACE_INFO * 1)]
-
-
-class WLAN_ASSOCIATION_ATTRIBUTES(ctypes.Structure):
-    _fields_ = [
-        ("dot11Ssid", DOT11_SSID),
-        ("dot11BssType", wintypes.DWORD),
-        ("dot11Bssid", ctypes.c_ubyte * 6),
-        ("dot11PhyType", wintypes.DWORD),
-        ("uDot11PhyIndex", wintypes.ULONG),
-        ("wlanSignalQuality", wintypes.ULONG),
-        ("ulRxRate", wintypes.ULONG),
-        ("ulTxRate", wintypes.ULONG),
-    ]
-
-
-class WLAN_SECURITY_ATTRIBUTES(ctypes.Structure):
-    _fields_ = [("bSecurityEnabled", wintypes.BOOL), ("bOneXEnabled", wintypes.BOOL),
-                ("dot11AuthAlgorithm", wintypes.DWORD), ("dot11CipherAlgorithm", wintypes.DWORD)]
-
-
-class WLAN_CONNECTION_ATTRIBUTES(ctypes.Structure):
-    _fields_ = [
-        ("isState", wintypes.DWORD),
-        ("wlanConnectionMode", wintypes.DWORD),
-        ("strProfileName", wintypes.WCHAR * 256),
-        ("wlanAssociationAttributes", WLAN_ASSOCIATION_ATTRIBUTES),
-        ("wlanSecurityAttributes", WLAN_SECURITY_ATTRIBUTES),
-    ]
 
 
 class WLAN_AVAILABLE_NETWORK(ctypes.Structure):
@@ -181,7 +152,6 @@ AUTH = {
 }
 # auth algorithms we can create a profile for from the plugin (personal / open)
 SUPPORTED_NEW = {1, 4, 7, 9}
-CIPHER = {0: "none", 2: "TKIP", 4: "AES", 8: "GCMP", 0x101: "WEP", 0x102: "WEP"}
 
 WLAN_AVAILABLE_NETWORK_CONNECTED = 1
 WLAN_AVAILABLE_NETWORK_HAS_PROFILE = 2
@@ -272,28 +242,6 @@ class Wlan:
         finally:
             _wlan.WlanFreeMemory(p)
 
-    def connection(self, guid):
-        """Current connection dict or None when not connected."""
-        size, data, opcode_type = wintypes.DWORD(), c_void_p(), wintypes.DWORD()
-        rc = _wlan.WlanQueryInterface(self.handle, byref(guid), 7, None, byref(size), byref(data), byref(opcode_type))
-        if rc == ERROR_INVALID_STATE:
-            return None
-        if rc != ERROR_SUCCESS:
-            raise OSError(rc, "WlanQueryInterface(current_connection) failed")
-        try:
-            c = ctypes.cast(data, POINTER(WLAN_CONNECTION_ATTRIBUTES)).contents
-            if c.isState != 1:  # wlan_interface_state_connected
-                return None
-            a = c.wlanAssociationAttributes
-            return {
-                "ssid": a.dot11Ssid.text(),
-                "profile": c.strProfileName,
-                "signal": int(a.wlanSignalQuality),
-                "security": AUTH.get(c.wlanSecurityAttributes.dot11AuthAlgorithm, ("", "?"))[1],
-            }
-        finally:
-            _wlan.WlanFreeMemory(data)
-
     def scan(self, guid):
         """Start a scan and return at once; scan_done is set when Windows reports the result."""
         self.scan_done.clear()
@@ -323,7 +271,6 @@ class Wlan:
                     "connected": bool(net.dwFlags & WLAN_AVAILABLE_NETWORK_CONNECTED),
                     "known": bool(net.dwFlags & WLAN_AVAILABLE_NETWORK_HAS_PROFILE),
                     "profile": net.strProfileName or None,
-                    "connectable": bool(net.bNetworkConnectable),
                 }
                 entry["can_add"] = entry["auth"] in SUPPORTED_NEW
                 old = best.get(ssid)

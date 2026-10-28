@@ -179,7 +179,7 @@ class PairedDevices(_Watch):
                 self._start()
         self._first_pass.wait(3)
         out = [{"id": i.id, "address": _address(i.id), "name": i.name or _address(i.id), "connected": _connected(i),
-                "type": _device_type(i), "le": i.id.startswith("BluetoothLE#")} for i in self._snapshot()]
+                "type": _device_type(i)} for i in self._snapshot()]
         out.sort(key=lambda d: (not d["connected"], d["name"].lower()))
         return out
 

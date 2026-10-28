@@ -125,7 +125,7 @@ class SystemService:
 
     # ---- state --------------------------------------------------------------------
     def state(self):
-        out = {"radios": {"wifi": None, "bluetooth": None}, "bluetooth": [], "brightness": None,
+        out = {"radios": {"wifi": None, "bluetooth": None}, "brightness": None,
                "airplane": False, "errors": {}}
         err = out["errors"]
         out["radios"] = _collect(err, "radios", radios.get_states, out["radios"])
@@ -146,7 +146,6 @@ class SystemService:
         out["bt_devices"] = []
         if out["radios"].get("bluetooth") == "on":
             out["bt_devices"] = _collect(err, "bluetooth", self.bluetooth_devices, [])
-            out["bluetooth"] = [d for d in out["bt_devices"] if d["connected"]]
         h = _collect(err, "hdr", hdr.state) or {}  # ~1 ms; shown in Quick Settings next to Night mode
         out["hdr"] = h if h.get("supported") else None
         out["night"] = _collect(err, "night", nightlight.is_enabled)

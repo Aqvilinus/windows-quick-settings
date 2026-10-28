@@ -107,12 +107,12 @@ def state():
         v = info2.value
         supported = bool(v & (1 << 4))                      # highDynamicRangeSupported
         on = bool(v & (1 << 5)) or info2.activeColorMode == COLOR_MODE_HDR  # highDynamicRangeUserEnabled
-        return {"supported": supported, "on": on and supported, "limited": bool(v & (1 << 3))}
+        return {"supported": supported, "on": on and supported}
     info = COLOR_INFO(HEADER(GET_ADVANCED_COLOR_INFO, sizeof(COLOR_INFO), adapter, tid))
     rc = _user32.DisplayConfigGetDeviceInfo(byref(info))
     if rc:
         raise OSError(rc, "DisplayConfigGetDeviceInfo failed")
-    return {"supported": bool(info.value & 1), "on": bool(info.value & 2), "limited": bool(info.value & 8)}
+    return {"supported": bool(info.value & 1), "on": bool(info.value & 2)}
 
 
 def set_enabled(on, wait=3.5):

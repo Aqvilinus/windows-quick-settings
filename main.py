@@ -114,9 +114,6 @@ class Plugin:
     async def wifi_disconnect(self):
         return await self._call("wifi_disconnect")
 
-    async def bluetooth_devices(self):
-        return await self._call("bluetooth_devices")
-
     async def bluetooth_audio(self, name, connect):
         return await self._call("bluetooth_audio", str(name), bool(connect), timeout=20)
 

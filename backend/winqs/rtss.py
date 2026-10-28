@@ -35,7 +35,6 @@ def _install_dir():
 
 
 DIR = _install_dir()
-EXE = os.path.join(DIR, "RTSS.exe")
 HOOKS = os.path.join(DIR, "RTSSHooks64.dll")
 GLOBAL = os.path.join(DIR, "Profiles", "Global")
 
