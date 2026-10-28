@@ -36,7 +36,7 @@ The plugin's own Decky page is intentionally empty: everything lives in Steam's 
 
 ## Requirements
 
-- Windows 10/11 with Steam Big Picture and the Windows build of Decky Loader
+- Windows 10/11 with Steam Big Picture and the Windows build of Decky Loader 3.3 or newer (it runs plugins on Python 3.14)
 - Optional: [RivaTuner Statistics Server](https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/)
   for the frame limit in DX12 / Vulkan games. RTSS needs administrator rights, the plugin does not: the first time,
   the Performance tab offers a one-time setup (a Windows UAC prompt) that lets your account change RTSS profiles and
@@ -44,19 +44,34 @@ The plugin's own Decky page is intentionally empty: everything lives in Steam's 
 
 ## How it works
 
-- `main.py` is the Decky backend entry point. `backend/winqs/` talks to Windows directly: Windows Runtime APIs
-  (radios, network connectivity, battery, Bluetooth devices, search and pairing) through [pywinrt](https://github.com/pywinrt/pywinrt),
-  bundled in `py_modules/` with `typing_extensions`; Core Audio through [pycaw](https://github.com/AndreMiras/pycaw) and
-  [comtypes](https://github.com/enthought/comtypes); processes through [psutil](https://github.com/giampaolo/psutil);
-  and the remaining Win32 / vendor APIs through `ctypes` (WLAN API, DisplayConfig, power settings, Intel IGCL, RTSS
-  hooks API). Licenses of the bundled libraries are in `py_modules/LICENSES`.
-- `dist/index.js` is the frontend. It injects its sections into Steam's Quick Access Menu tabs and uses Steam's own
-  components and localization strings wherever they exist.
+- `main.py` is the Decky backend entry point. `py_modules/winqs/` talks to Windows directly: Windows Runtime APIs
+  (radios, network connectivity, battery, Bluetooth devices, search and pairing) through [pywinrt](https://github.com/pywinrt/pywinrt);
+  Core Audio through [pycaw](https://github.com/AndreMiras/pycaw) and [comtypes](https://github.com/enthought/comtypes);
+  processes through [psutil](https://github.com/giampaolo/psutil); and the remaining Win32 / vendor APIs through
+  `ctypes` (WLAN API, DisplayConfig, power settings, Intel IGCL, RTSS hooks API). The libraries are pinned in
+  `requirements.txt` and bundled into the release; their licenses are in `py_modules/LICENSES`.
+- `src/index.js` is the frontend, built into `dist/index.js` with Decky's rollup setup. It injects its sections into
+  Steam's Quick Access Menu tabs and uses Steam's own components, icons and localization strings wherever they exist.
 
 ## Install
 
-Copy this folder to `%USERPROFILE%\homebrew\plugins\windows-quick-settings` and restart Decky Loader (or reload the
-plugin from Decky's developer settings).
+Download `windows-quick-settings-v<version>.zip` from the [releases](https://github.com/Aqvilinus/windows-quick-settings/releases)
+and install it from Decky's developer settings (install from a ZIP file), or extract it to
+`%USERPROFILE%\homebrew\plugins\`.
+
+## Build
+
+Needs Node.js (version in `.nvmrc`, pnpm through `corepack enable`) and Python with pip.
+
+```
+python scripts/build.py [--version 0.2.0] [--python 3.14] [--local]
+```
+
+The script runs `pnpm install --frozen-lockfile` and `pnpm run build`, installs `requirements.txt` for Windows and
+Decky's Python version into the archive's `py_modules/`, adds `python3.dll` for psutil, and writes
+`out/windows-quick-settings-v<version>.zip`. `--local` also refreshes `py_modules/` in the checkout, for a checkout that
+Decky loads directly (restart Decky afterwards). The GitHub workflow runs the same script; started by hand with a
+version, it also tags the release and attaches the zip to a draft GitHub release.
 
 ## License
 

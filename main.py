@@ -1,19 +1,15 @@
 """Windows Quick Settings - Decky Loader backend.
 
 Wi-Fi, Bluetooth, audio, display and frame limit controls on Windows for Steam's Quick Access Menu.
-Every system call runs on a single dedicated thread; see backend/winqs/service.py.
+Every system call runs on a single dedicated thread; see py_modules/winqs/service.py.
 """
 import asyncio
-import os
-import sys
 import threading
 
 import decky
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend"))
-
-from winqs.hotkeys import MenuHotkeys  # noqa: E402
-from winqs.service import SystemService  # noqa: E402
+from winqs.hotkeys import MenuHotkeys  # py_modules/winqs; Decky puts py_modules on sys.path
+from winqs.service import SystemService
 
 
 class Plugin:
@@ -159,7 +155,7 @@ class Plugin:
     async def open_settings(self, page):
         return await self._call("open_settings", str(page))
 
-    # Ctrl+1 / Ctrl+2 (OneXConsole D-pad + M1) while a game runs: see backend/winqs/hotkeys.py
+    # Ctrl+1 / Ctrl+2 (OneXConsole D-pad + M1) while a game runs: see py_modules/winqs/hotkeys.py
     def _on_hotkey(self, menu, overlay_pid=None):
         emit = getattr(decky, "emit", None)
         if emit and self.loop:

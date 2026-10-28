@@ -1,0 +1,95 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.0. Leave empty for a build without a release."
+        required: false
+        type: string
+
+env:
+  # Decky Loader for Windows runs plugins on its own Python; compiled wheels and python3.dll must match it
+  DECKY_PYTHON: "3.14"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js (.nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable pnpm (version from package.json)
+        run: corepack enable
+
+      - name: Set up Python ${{ env.DECKY_PYTHON }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.DECKY_PYTHON }}
+
+      - name: Build
+        shell: bash
+        run: |
+          version="${{ inputs.version }}"
+          python scripts/build.py --python "$DECKY_PYTHON" ${version:+--version "$version"}
+
+      - name: Check that the packages import on Decky's Python
+        shell: bash
+        run: |
+          python -I -c "
+          import sys
+          sys.path.insert(0, 'build/windows-quick-settings/py_modules')
+          import winrt.windows.devices.bluetooth, winrt.windows.devices.radios, winrt.windows.system.power
+          import pycaw.pycaw, psutil
+          print('ok:', psutil.Process().name())
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-quick-settings
+          path: out/*.zip
+
+      - name: Commit the version and tag it
+        if: inputs.version != ''
+        shell: bash
+        run: |
+          version="${{ inputs.version }}"
+          version="${version#v}"
+          python - "$version" <<'EOF'
+          import json, sys
+          with open("package.json", encoding="utf-8") as f:
+              package = json.load(f)
+          package["version"] = sys.argv[1]
+          with open("package.json", "w", encoding="utf-8", newline="\n") as f:
+              json.dump(package, f, indent=2, ensure_ascii=False)
+              f.write("\n")
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet package.json; then
+            git add package.json
+            git commit -m "Release v$version"
+            git push origin HEAD:main
+          fi
+          git tag -a "v$version" -m "v$version"
+          git push origin "v$version"
+          echo "TAG=v$version" >> "$GITHUB_ENV"
+
+      - name: Draft the GitHub release
+        if: inputs.version != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: out/*.zip
+          draft: true
+          generate_release_notes: true

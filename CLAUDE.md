@@ -6,14 +6,14 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 
 - OneXPlayer 3 (Core Ultra, Arc B390), Windows 11 in Xbox full-screen mode, home app OmniConsole. The panel is 1920x1200 with VRR, 30–144 Hz.
 - OneXConsole (vendor app, elevated) owns TDP, fans, buttons and its own RTSS OSD.
-- Decky Loader 3.3.0 for Windows, unelevated. Settings are in `%USERPROFILE%\homebrew\settings\windows-quick-settings`, logs in `homebrew\logs\windows-quick-settings`.
-- The backend runs on Decky's frozen Python 3.11 (no pip). Vendored libraries go in `py_modules/` (Decky adds it to `sys.path`): pywinrt (`winrt-runtime` + namespaces, cp311 win_amd64), `typing_extensions`, `comtypes` + `pycaw` (Core Audio), `psutil` (abi3: needs `python3.dll`, placed next to `_psutil_windows.pyd` because Decky's frozen Python has none). Licenses in `py_modules/LICENSES`. The rest uses `ctypes` for Win32 / vendor DLLs.
+- Decky Loader 3.3.1 for Windows (official release exe, installed 2026-10-28 over the Decky Manager build; the old exe is in `homebrew\services-backup-v3.3.0-py311`), unelevated, started by Decky Manager. Settings are in `%USERPROFILE%\homebrew\settings\windows-quick-settings`, logs in `homebrew\logs\windows-quick-settings`.
+- The backend runs on Decky's frozen Python 3.14 (no pip). `py_modules/` is on `sys.path` (appended by Decky): the plugin's own `winqs/` package and `LICENSES/` are in git; the third-party packages are installed there by `scripts/build.py` from `requirements.txt` and are git-ignored: pywinrt (`winrt-runtime` cp314 + pure-python namespaces), `typing_extensions`, `comtypes` + `pycaw` (Core Audio), `psutil` (abi3, so it loads `python3.dll`; Decky's exe has none, the build adds the one from python.org's embeddable package of the same Python version). The rest uses `ctypes` for Win32 / vendor DLLs.
 - Steam CEF DevTools: `http://127.0.0.1:8080`. Decky runs in the `SharedJSContext` target.
 
 ## Layout
 
 - `main.py`: backend entry. `Plugin` methods are the callables; `_call("<SystemService method>", *args)` runs it on the worker thread and wraps the result / error for the UI.
-- `backend/winqs/`:
+- `py_modules/winqs/`:
   - `service.py`: `state()` for the Quick Settings tab, `perf_state()` for the Performance tab, all actions.
   - `com.py`: sets `sys.coinit_flags = 0` (comtypes initialises COM on import; the process is MTA for pywinrt), `GUID`, `init_worker` (MTA, EcoQoS off). Import it before comtypes.
   - `radios.py`, `nlm.py` (pywinrt): radio on/off (`Windows.Devices.Radios`); internet status (`NetworkConnectivityLevel`).
@@ -21,12 +21,15 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
   - `bt.py` (pywinrt): Bluetooth paired list (watchers kept running), search, pairing, removal.
   - `audio.py` (pycaw interfaces: volume, mute, devices, IPolicyConfig default switch), `btaudio.py` (comtypes declarations of IDeviceTopology / IConnector / IPart / IKsControl for the BT audio one-shot connect). `IMMDevice.GetId` goes through comtypes' raw `__com_GetId` so the string is freed (it runs on every poll).
   - `brightness.py`, `nightlight.py`, `hdr.py`, `display.py`, `battery.py`: brightness, Night light, HDR, the current refresh rate (read only, the Frame Limit slider's top), battery (`Windows.Devices.Power`, pywinrt).
-  - `rtss.py` + `../setup_rtss.ps1`, `framelimit.py`: frame limit through RTSS; Intel IGCL fallback.
+  - `rtss.py` + `setup_rtss.ps1`, `framelimit.py`: frame limit through RTSS; Intel IGCL fallback.
   - `hotkeys.py`: Ctrl+1 / Ctrl+2 for Steam's side menus in games.
-- `dist/index.js`: the whole frontend, hand-written, no build step, split by `// ------` banners. Shared helpers near the top: `lazy()` for one-time Steam module lookups, `withPending` / `runAction` / `act` for backend actions, `dialog()`, `pressable()`, `useStableOrder()`.
+- `src/index.js`: the whole frontend (plain JavaScript), split by `// ------` banners, built into `dist/index.js` (git-ignored) by `pnpm run build`: `@decky/rollup` with the entry switched to `src/index.js` and its TypeScript step removed (`rollup.config.js`). `@decky/ui` → `DFL`, React → `SP_REACT` / `SP_JSX`, `@decky/manifest` → plugin.json, all external. Shared helpers near the top: `lazy()` for one-time Steam module lookups, `withPending` / `runAction` / `act` for backend actions, `dialog()`, `pressable()`, `useStableOrder()`.
 
 ## Workflow
 
+- Build: `python scripts/build.py [--version X.Y.Z] [--python 3.14] [--local]` → `out/windows-quick-settings-vX.Y.Z.zip` (top folder `windows-quick-settings/`: Decky keys settings and logs by folder name). It runs `pnpm install --frozen-lockfile` + `pnpm run build`, pip-installs `requirements.txt` for `win_amd64` + that Python, fails on any package not pinned there, strips dist-info / tests / stubs, and adds `python3.dll` (pinned sha256 per Python version in `PYTHON3_DLL`). `--local` refreshes this checkout's `py_modules/` (Decky loads the checkout); locked DLLs of the running plugin are renamed `*.old` and deleted by the next build. Restart the plugin's backend afterwards.
+- Node: portable v24 LTS in `C:\Users\Ivan\Tools\node` (not on PATH; `.nvmrc` = 24), pnpm through corepack (`packageManager` in package.json). pnpm 12 refuses packages younger than a day (minimumReleaseAge).
+- CI: `.github/workflows/build.yml` on windows-latest runs the same script and an import check on Python 3.14; started by hand with `version` it commits the version, tags `vX.Y.Z` and drafts a release with the zip.
 - Reload, from `SharedJSContext`:
   - backend: `await DeckyBackend.call("utilities/enable_plugin", "Windows Quick Settings")`;
   - frontend: `await DeckyPluginLoader.importPlugin("Windows Quick Settings", "0.1.0")`.

@@ -1,0 +1,26 @@
+# Third-party Python packages of the backend, installed into py_modules/ by scripts/build.py:
+#   pip install -r requirements.txt --target py_modules --platform win_amd64 --python-version <Decky's Python>
+#               --implementation cp --only-binary=:all:
+# Decky's own Python has no pip, and the wheels must match its version (Decky 3.3.x for Windows: Python 3.14).
+# Versions are pinned, including the indirect dependency winrt-Windows.Storage.Streams.
+
+# pywinrt v4 (Windows Runtime APIs). The namespace packages carry an epoch: "4!" is part of the version.
+winrt-runtime==4.0.3
+winrt-Windows.Devices.Bluetooth==4!10.0.28000.2705
+winrt-Windows.Devices.Enumeration==4!10.0.28000.2705
+winrt-Windows.Devices.Power==4!10.0.28000.2705
+winrt-Windows.Devices.Radios==4!10.0.28000.2705
+winrt-Windows.Foundation==4!10.0.28000.2705
+winrt-Windows.Foundation.Collections==4!10.0.28000.2705
+winrt-Windows.Networking==4!10.0.28000.2705
+winrt-Windows.Networking.Connectivity==4!10.0.28000.2705
+winrt-Windows.Storage.Streams==4!10.0.28000.2705
+winrt-Windows.System.Power==4!10.0.28000.2705
+typing_extensions==4.16.0
+
+# Core Audio (classic COM, which pywinrt can't call)
+comtypes==1.4.17
+pycaw==20260927
+
+# Process list and command lines
+psutil==7.2.2

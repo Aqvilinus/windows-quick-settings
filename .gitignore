@@ -1,2 +1,16 @@
 __pycache__/
 *.pyc
+
+# Frontend: dependencies and the rollup output (pnpm run build)
+node_modules/
+dist/
+
+# Python packages are installed by scripts/build.py from requirements.txt; only the plugin's own code is kept
+py_modules/*
+!py_modules/winqs/
+!py_modules/LICENSES/
+
+# Build output
+build/
+out/
+*.zip
