@@ -6,12 +6,14 @@
 # Nothing else is changed. Undo: Unregister-ScheduledTask -TaskName 'WinQS RTSS'; icacls <Profiles> /remove <user>
 param(
     [Parameter(Mandatory = $true)][string]$UserSid,
-    [string]$Log = ""
+    [string]$Log = "",
+    # where RTSS is installed, as the plugin found it in the registry (default: the standard folder)
+    [string]$RtssDir = ""
 )
 $ErrorActionPreference = 'Stop'
 if ($Log) { Start-Transcript -Path $Log -Force | Out-Null }
 try {
-    $rtss = Join-Path ${env:ProgramFiles(x86)} 'RivaTuner Statistics Server'
+    $rtss = if ($RtssDir) { $RtssDir } else { Join-Path ${env:ProgramFiles(x86)} 'RivaTuner Statistics Server' }
     $exe = Join-Path $rtss 'RTSS.exe'
     if (-not (Test-Path $exe)) { throw "RTSS not found in $rtss" }
     $user = (New-Object System.Security.Principal.SecurityIdentifier($UserSid)).Translate([System.Security.Principal.NTAccount]).Value

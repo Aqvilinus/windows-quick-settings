@@ -1,24 +1,24 @@
 """Wi-Fi / Bluetooth radio on-off through WinRT Windows.Devices.Radios (pywinrt)."""
+import functools
 import time
 
-from winrt.windows.devices.radios import Radio, RadioAccessStatus, RadioKind, RadioState
+from winrt.windows.devices.radios import Radio, RadioKind, RadioState
 
 KIND = {RadioKind.WI_FI: "wifi", RadioKind.BLUETOOTH: "bluetooth"}
-STATE = {RadioState.UNKNOWN: "unknown", RadioState.ON: "on", RadioState.OFF: "off", RadioState.DISABLED: "disabled"}
-ACCESS = {RadioAccessStatus.UNSPECIFIED: "unspecified", RadioAccessStatus.ALLOWED: "allowed",
-          RadioAccessStatus.DENIED_BY_USER: "denied_by_user", RadioAccessStatus.DENIED_BY_SYSTEM: "denied_by_system"}
-
-_access = None
-_cache = {}          # kind -> Radio
-_cache_time = 0.0
 CACHE_SECONDS = 30   # re-enumerate radios now and then (adapter added/removed)
 
+_cache = {}          # kind -> Radio
+_cache_time = 0.0
 
+
+def _name(enum_value):
+    """RadioState.DENIED_BY_USER -> 'denied_by_user' (the names the frontend uses)."""
+    return enum_value.name.lower()
+
+
+@functools.cache
 def request_access():
-    global _access
-    if _access is None:
-        _access = ACCESS.get(Radio.request_access_async().get(), "unknown")
-    return _access
+    return _name(Radio.request_access_async().get())
 
 
 def _fill_cache():
@@ -27,14 +27,13 @@ def _fill_cache():
     global _cache_time
     _cache.clear()
     for r in Radio.get_radios_async().get():
-        kind = KIND.get(r.kind)
-        if kind and kind not in _cache:
-            _cache[kind] = r
+        if r.kind in KIND:
+            _cache.setdefault(KIND[r.kind], r)
     _cache_time = time.monotonic()
 
 
 def get_states():
-    """{'wifi': 'on'|'off'|..., 'bluetooth': ...}; a missing radio is reported as None."""
+    """{'wifi': 'on'|'off'|'disabled'|'unknown', 'bluetooth': ...}; a missing radio is reported as None."""
     global _cache_time
     request_access()
     if not _cache_time or time.monotonic() - _cache_time > CACHE_SECONDS:
@@ -42,7 +41,7 @@ def get_states():
     result = {"wifi": None, "bluetooth": None}
     for kind, r in list(_cache.items()):
         try:
-            result[kind] = STATE.get(r.state, "unknown")
+            result[kind] = _name(r.state)
         except Exception:  # noqa: BLE001 - stale object: enumerate again next time
             _cache_time = 0.0
             raise
@@ -57,6 +56,6 @@ def set_state(kind, on):
     r = _cache.get(kind)
     if r is None:
         raise RuntimeError("no %s radio found" % kind)
-    status = ACCESS.get(r.set_state_async(RadioState.ON if on else RadioState.OFF).get(), "unknown")
+    status = _name(r.set_state_async(RadioState.ON if on else RadioState.OFF).get())
     _cache_time = 0.0  # read fresh objects after a change
     return status

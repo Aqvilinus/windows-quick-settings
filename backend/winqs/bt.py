@@ -275,7 +275,9 @@ class Pairing:
             with self._lock:
                 self._request = (args, deferral)
                 self._state = dict(self._state, state="confirm", pin=pin)
-            threading.Timer(PIN_SECONDS, self._expire, args=(deferral,)).start()
+            timer = threading.Timer(PIN_SECONDS, self._expire, args=(deferral,))
+            timer.daemon = True  # never holds up the plugin's exit
+            timer.start()
         # other kinds (e.g. "Provide PIN") are left unanswered, which declines them
 
     def _expire(self, deferral):

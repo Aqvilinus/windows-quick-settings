@@ -10,6 +10,7 @@ from ctypes import byref, sizeof, wintypes
 
 _user32 = ctypes.WinDLL("user32")
 
+ERROR_INSUFFICIENT_BUFFER = 122
 QDC_ONLY_ACTIVE_PATHS = 0x2
 OUTPUT_TECH_INTERNAL = 0x80000000
 GET_ADVANCED_COLOR_INFO, SET_ADVANCED_COLOR_STATE = 9, 10
@@ -86,11 +87,11 @@ def _target():
             raise OSError(rc, "GetDisplayConfigBufferSizes failed")
         paths, modes = (PATH_INFO * n_path.value)(), (MODE_INFO * n_mode.value)()
         rc = _user32.QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, byref(n_path), paths, byref(n_mode), modes, None)
-        if rc == 122:  # ERROR_INSUFFICIENT_BUFFER
+        if rc == ERROR_INSUFFICIENT_BUFFER:
             continue
         if rc:
             raise OSError(rc, "QueryDisplayConfig failed")
-        active = list(paths)[: n_path.value]
+        active = paths[: n_path.value]
         if not active:
             raise RuntimeError("no active display")
         p = next((x for x in active if x.targetInfo.outputTechnology == OUTPUT_TECH_INTERNAL), active[0])
@@ -98,20 +99,16 @@ def _target():
     raise RuntimeError("display configuration kept changing")
 
 
-def _header(kind, size, adapter, tid):
-    return HEADER(kind, size, adapter, tid)
-
-
 def state():
     """{'supported', 'on'} for HDR on the built-in display."""
     adapter, tid = _target()
-    info2 = COLOR_INFO_2(_header(GET_ADVANCED_COLOR_INFO_2, sizeof(COLOR_INFO_2), adapter, tid))
+    info2 = COLOR_INFO_2(HEADER(GET_ADVANCED_COLOR_INFO_2, sizeof(COLOR_INFO_2), adapter, tid))
     if _user32.DisplayConfigGetDeviceInfo(byref(info2)) == 0:
         v = info2.value
         supported = bool(v & (1 << 4))                      # highDynamicRangeSupported
         on = bool(v & (1 << 5)) or info2.activeColorMode == COLOR_MODE_HDR  # highDynamicRangeUserEnabled
         return {"supported": supported, "on": on and supported, "limited": bool(v & (1 << 3))}
-    info = COLOR_INFO(_header(GET_ADVANCED_COLOR_INFO, sizeof(COLOR_INFO), adapter, tid))
+    info = COLOR_INFO(HEADER(GET_ADVANCED_COLOR_INFO, sizeof(COLOR_INFO), adapter, tid))
     rc = _user32.DisplayConfigGetDeviceInfo(byref(info))
     if rc:
         raise OSError(rc, "DisplayConfigGetDeviceInfo failed")
@@ -120,9 +117,9 @@ def state():
 
 def set_enabled(on, wait=3.5):
     adapter, tid = _target()
-    st = SET_STATE(_header(SET_HDR_STATE, sizeof(SET_STATE), adapter, tid), 1 if on else 0)
+    st = SET_STATE(HEADER(SET_HDR_STATE, sizeof(SET_STATE), adapter, tid), 1 if on else 0)
     if _user32.DisplayConfigSetDeviceInfo(byref(st)) != 0:
-        st = SET_STATE(_header(SET_ADVANCED_COLOR_STATE, sizeof(SET_STATE), adapter, tid), 1 if on else 0)
+        st = SET_STATE(HEADER(SET_ADVANCED_COLOR_STATE, sizeof(SET_STATE), adapter, tid), 1 if on else 0)
         rc = _user32.DisplayConfigSetDeviceInfo(byref(st))
         if rc:
             raise OSError(rc, "DisplayConfigSetDeviceInfo failed")

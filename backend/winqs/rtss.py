@@ -13,13 +13,13 @@ import ctypes
 import os
 import re
 import subprocess
+import time
 import winreg
 
 import psutil
 from ctypes import byref, c_bool, c_char_p, c_int32, c_uint32, c_void_p, wintypes
 
 TASK = "WinQS RTSS"
-CREATE_NO_WINDOW = 0x08000000
 
 
 def _install_dir():
@@ -44,7 +44,7 @@ def running():
 
 
 def _run(args, timeout=10):
-    return subprocess.run(args, capture_output=True, text=True, timeout=timeout, creationflags=CREATE_NO_WINDOW)
+    return subprocess.run(args, capture_output=True, text=True, timeout=timeout, creationflags=subprocess.CREATE_NO_WINDOW)
 
 
 def task_exists():
@@ -82,8 +82,9 @@ class RtssFrameLimit:
 
     def _hooks(self):
         if self._dll is None:
-            os.add_dll_directory(DIR)
-            d = ctypes.WinDLL(HOOKS)  # kept loaded; the profile calls only touch the 64-bit hooking context
+            # a full path: Windows also looks for its dependencies in RTSS's folder, without changing the process-wide
+            # DLL search path. Kept loaded; the profile calls only touch the 64-bit hooking context.
+            d = ctypes.WinDLL(HOOKS)
             d.LoadProfile.argtypes = [c_char_p]
             d.SaveProfile.argtypes = [c_char_p]
             d.GetProfileProperty.argtypes = [c_char_p, c_void_p, c_uint32]
@@ -98,7 +99,6 @@ class RtssFrameLimit:
         """'missing' (RTSS not installed) | 'setup' (one-time setup needed) | 'ready'."""
         if not os.path.exists(HOOKS):
             return "missing"
-        import time
         if self._task is None or (not self._task and time.monotonic() - self._task_time > self.TASK_CACHE):
             self._task = task_exists()
             self._task_time = time.monotonic()

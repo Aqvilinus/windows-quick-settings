@@ -1,10 +1,12 @@
 """All system calls run on one dedicated thread (one COM/WinRT apartment, one wlan handle)."""
 import concurrent.futures
+import contextlib
 import json
 import os
+import subprocess
 import time
 
-from . import audio, battery, brightness, bt, btaudio, display, hdr, nightlight, nlm, radios
+from . import audio, battery, brightness, bt, btaudio, display, hdr, nightlight, nlm, radios, rtss
 from .framelimit import IntelFrameLimit
 from .rtss import RtssFrameLimit
 from .com import init_worker
@@ -14,6 +16,18 @@ from .wlan import SUPPORTED_NEW, WLAN_PROFILE_GROUP_POLICY, LocationBlocked, Wla
 WLAN_REOPEN_ERRORS = {6, 1702, 1722, 1726, 1727, 1753}
 SCAN_EVERY = 30         # s; only while Wi-Fi is on but not connected (a scan disturbs a connected link)
 NETWORKS_MAX_AGE = 20   # s; with notifications the list is re-read on changes, this is only a safety net
+
+
+FLOWS = ("output", "input")
+
+
+def _collect(errors, key, fn, default=None):
+    """fn(), or `default` with the failure reported in errors[key]: one broken part never hides the rest."""
+    try:
+        return fn()
+    except Exception as e:  # noqa: BLE001
+        errors[key] = str(e)
+        return default
 
 
 class SystemService:
@@ -44,10 +58,8 @@ class SystemService:
             if self._wlan:
                 self._wlan.close()
                 self._wlan = None
-        try:
+        with contextlib.suppress(Exception):
             self.pool.submit(_close).result(timeout=5)
-        except Exception:
-            pass
         self.pool.shutdown(wait=False, cancel_futures=True)
 
     def _wl(self):
@@ -57,10 +69,8 @@ class SystemService:
 
     def _reset_wlan(self):
         if self._wlan is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._wlan.close()
-            except Exception:  # noqa: BLE001
-                pass
         self._wlan, self._guid, self._nets_time = None, None, 0.0
 
     def _wifi(self, fn):
@@ -117,10 +127,8 @@ class SystemService:
     def state(self):
         out = {"radios": {"wifi": None, "bluetooth": None}, "bluetooth": [], "brightness": None,
                "airplane": False, "errors": {}}
-        try:
-            out["radios"] = radios.get_states()
-        except Exception as e:  # noqa: BLE001 - report, keep going
-            out["errors"]["radios"] = str(e)
+        err = out["errors"]
+        out["radios"] = _collect(err, "radios", radios.get_states, out["radios"])
         out["wifi_networks"] = []
         try:
             if out["radios"].get("wifi") == "on":
@@ -130,50 +138,21 @@ class SystemService:
                     self._last_scan = time.monotonic()
                 out["wifi_networks"] = nets
                 if any(n["connected"] for n in nets):
-                    try:
-                        out["internet"] = nlm.status()  # ~1 ms
-                    except Exception as e:  # noqa: BLE001
-                        out["errors"]["internet"] = str(e)
+                    out["internet"] = _collect(err, "internet", nlm.status)
         except LocationBlocked:
             out["wifi_location_off"] = True
         except Exception as e:  # noqa: BLE001
             out["errors"]["wifi"] = str(e)
         out["bt_devices"] = []
         if out["radios"].get("bluetooth") == "on":
-            try:
-                out["bt_devices"] = self.bluetooth_devices()
-                out["bluetooth"] = [d for d in out["bt_devices"] if d["connected"]]
-            except Exception as e:  # noqa: BLE001
-                out["errors"]["bluetooth"] = str(e)
-        try:
-            h = hdr.state()  # ~1 ms; shown in Quick Settings next to Night mode
-            out["hdr"] = h if h.get("supported") else None
-        except Exception as e:  # noqa: BLE001
-            out["hdr"] = None
-            out["errors"]["hdr"] = str(e)
-        try:
-            out["night"] = nightlight.is_enabled()
-        except Exception as e:  # noqa: BLE001
-            out["night"] = None
-            out["errors"]["night"] = str(e)
-        try:
-            out["brightness"] = brightness.get_level()
-        except Exception as e:  # noqa: BLE001
-            out["errors"]["brightness"] = str(e)
-        out["audio"] = {}
-        out["audio_devices"] = {}
-        for flow in ("output", "input"):
-            try:
-                out["audio"][flow] = audio.get(flow)
-            except Exception as e:  # noqa: BLE001
-                out["audio"][flow] = None
-                out["errors"]["audio_" + flow] = str(e)
-            try:
-                out["audio_devices"][flow] = [{"id": d["id"], "name": d["name"], "default": d["default"]}
-                                              for d in audio.devices(flow)]
-            except Exception as e:  # noqa: BLE001
-                out["audio_devices"][flow] = []
-                out["errors"]["audio_devices_" + flow] = str(e)
+            out["bt_devices"] = _collect(err, "bluetooth", self.bluetooth_devices, [])
+            out["bluetooth"] = [d for d in out["bt_devices"] if d["connected"]]
+        h = _collect(err, "hdr", hdr.state) or {}  # ~1 ms; shown in Quick Settings next to Night mode
+        out["hdr"] = h if h.get("supported") else None
+        out["night"] = _collect(err, "night", nightlight.is_enabled)
+        out["brightness"] = _collect(err, "brightness", brightness.get_level)
+        out["audio"] = {f: _collect(err, "audio_" + f, lambda f=f: audio.get(f)) for f in FLOWS}
+        out["audio_devices"] = {f: _collect(err, "audio_devices_" + f, lambda f=f: audio.devices(f), []) for f in FLOWS}
         r = out["radios"]
         present = [v for v in r.values() if v is not None]
         out["airplane"] = bool(present) and all(v == "off" for v in present) and bool(self._load().get("airplane"))
@@ -353,28 +332,20 @@ class SystemService:
         return nightlight.set_enabled(on)
 
     def set_audio_device(self, flow, dev_id):
-        if flow not in ("output", "input"):
+        if flow not in FLOWS:
             raise ValueError("flow must be output or input")
         return audio.set_default(flow, dev_id)
 
     def set_volume(self, flow, value):
-        if flow not in ("output", "input"):
+        if flow not in FLOWS:
             raise ValueError("flow must be output or input")
         return audio.set_volume(flow, value)
 
     # ---- refresh rate / frame limit (Performance tab) ------------------------------------------
     def perf_state(self):
         out = {"errors": {}}
-        try:
-            out["display"] = display.info()
-        except Exception as e:  # noqa: BLE001
-            out["display"] = None
-            out["errors"]["display"] = str(e)
-        try:
-            out["rtss"] = self._rtss.status()
-        except Exception as e:  # noqa: BLE001
-            out["rtss"] = "missing"
-            out["errors"]["rtss"] = str(e)
+        out["display"] = _collect(out["errors"], "display", display.info)
+        out["rtss"] = _collect(out["errors"], "rtss", self._rtss.status, "missing")
         try:
             out["frame_limit"] = self._limiter().get()
             fl = out["frame_limit"]
@@ -400,11 +371,9 @@ class SystemService:
         on current drivers). With RTSS in charge the driver limit is switched off so two limiters never stack."""
         if self._rtss.status() == "ready":
             if not self._intel_cleared:
-                try:
+                with contextlib.suppress(Exception):  # no Intel GPU / driver: nothing to clear
                     if self._frames.get().get("fps"):
                         self._frames.set(0)
-                except Exception:  # noqa: BLE001 - no Intel GPU / driver: nothing to clear
-                    pass
                 self._intel_cleared = True
             return self._rtss
         self._intel_cleared = False
@@ -413,18 +382,17 @@ class SystemService:
     def rtss_keepalive(self):
         """While games run (called with the game-overlay list, about every 30 s): if a limit is set but RTSS is not
         running, e.g. OneXConsole closed it when its own OSD was switched off, start it again. ~1 ms otherwise."""
-        from . import rtss as _rtss
-        if self._rtss.status() == "ready" and (_rtss.saved_limit() or 0) > 0 and not _rtss.running():
+        if self._rtss.status() == "ready" and (rtss.saved_limit() or 0) > 0 and not rtss.running():
             self._rtss.ensure_running()
 
     def setup_rtss(self):
         """Start the one-time RTSS setup elevated. Windows shows its UAC prompt; returns without waiting."""
-        import subprocess
         script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "setup_rtss.ps1")
         sid = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True,
                              creationflags=subprocess.CREATE_NO_WINDOW, timeout=10).stdout.strip().split(",")[-1].strip('"')
         log = os.path.join(os.path.dirname(self.state_file), "setup_rtss.log")
-        args = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%s" -UserSid %s -Log "%s"' % (script, sid, log)
+        args = ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%s" -UserSid %s -Log "%s" -RtssDir "%s"'
+                % (script, sid, log, rtss.DIR))
         self._rtss.forget_status()
         try:
             os.startfile("powershell.exe", "runas", args, None, 0)  # ShellExecute "runas": Windows' UAC prompt, hidden
@@ -498,11 +466,9 @@ class SystemService:
 
     def _apply_fps(self, fps):
         lim = self._limiter()
-        try:
+        with contextlib.suppress(Exception):  # set() below reports the real error
             if int(lim.get().get("fps") or 0) == fps:
                 return
-        except Exception:  # noqa: BLE001 - set() below reports the real error
-            pass
         lim.set(fps)
 
     # ---- misc ----------------------------------------------------------------------------

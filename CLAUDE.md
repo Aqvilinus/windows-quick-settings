@@ -12,7 +12,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 
 ## Layout
 
-- `main.py`: backend entry. `Plugin` methods are the callables, run on one worker thread via `_call`.
+- `main.py`: backend entry. `Plugin` methods are the callables; `_call("<SystemService method>", *args)` runs it on the worker thread and wraps the result / error for the UI.
 - `backend/winqs/`:
   - `service.py`: `state()` for the Quick Settings tab, `perf_state()` for the Performance tab, all actions.
   - `com.py`: sets `sys.coinit_flags = 0` (comtypes initialises COM on import; the process is MTA for pywinrt), `GUID`, `init_worker` (MTA, EcoQoS off). Import it before comtypes.
@@ -87,7 +87,8 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 ## Frame limit
 
 - **RTSS** (all APIs): `RTSSHooks64.dll` `LoadProfile("")` → `SetProfileProperty("FramerateLimit")` → `SaveProfile` → `UpdateProfiles`.
-  - Works unelevated after `setup_rtss.ps1` (Profiles ACL + "WinQS RTSS" logon task). Only the owner runs it, from the Performance tab (UAC).
+  - Works unelevated after `setup_rtss.ps1` (Profiles ACL + "WinQS RTSS" logon task; it gets `-RtssDir` from the registry lookup in `rtss.py`). Only the owner runs it, from the Performance tab (UAC, `os.startfile(..., "runas")`).
+  - `RTSSHooks64.dll` is loaded by full path (its folder is searched for dependencies); don't add it to the process DLL path.
   - OneXConsole writes the same limit and kills RTSS when its OSD is turned off; `rtss_keepalive()` restarts it.
   - Keep RTSS's D3D12 OSD renderer enabled.
 - **Intel IGCL** fallback: DX9/DX11 only. It is set to 0 whenever RTSS is active.

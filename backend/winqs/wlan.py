@@ -192,6 +192,13 @@ def signal_bucket(q):
     return 100 if q >= 75 else 75 if q >= 50 else 50 if q >= 25 else 25
 
 
+def _items(p, list_type, field, item_type):
+    """The items of a WLAN_*_LIST that Windows returned at `p`: dwNumberOfItems entries of `item_type` starting at
+    the `field` member (declared with length 1, as in wlanapi.h)."""
+    lst = list_type.from_address(p.value)
+    return (item_type * lst.dwNumberOfItems).from_address(p.value + getattr(list_type, field).offset)
+
+
 class Wlan:
     def __init__(self):
         self.handle = wintypes.HANDLE()
@@ -257,14 +264,11 @@ class Wlan:
         if rc != ERROR_SUCCESS:
             raise OSError(rc, "WlanEnumInterfaces failed")
         try:
-            lst = ctypes.cast(p, POINTER(WLAN_INTERFACE_INFO_LIST)).contents
-            if lst.dwNumberOfItems == 0:
+            arr = _items(p, WLAN_INTERFACE_INFO_LIST, "InterfaceInfo", WLAN_INTERFACE_INFO)
+            if not arr:
                 return None
-            arr = ctypes.cast(ctypes.addressof(lst.InterfaceInfo), POINTER(WLAN_INTERFACE_INFO * lst.dwNumberOfItems)).contents
             info = arr[0]
-            g = GUID()
-            ctypes.memmove(byref(g), byref(info.InterfaceGuid), ctypes.sizeof(GUID))
-            return g, info.strInterfaceDescription, info.isState
+            return GUID.from_buffer_copy(info.InterfaceGuid), info.strInterfaceDescription, info.isState
         finally:
             _wlan.WlanFreeMemory(p)
 
@@ -305,10 +309,7 @@ class Wlan:
             raise OSError(rc, "WlanGetAvailableNetworkList failed")
         best = {}
         try:
-            lst = ctypes.cast(p, POINTER(WLAN_AVAILABLE_NETWORK_LIST)).contents
-            n = lst.dwNumberOfItems
-            arr = ctypes.cast(ctypes.addressof(lst.Network), POINTER(WLAN_AVAILABLE_NETWORK * n)).contents if n else []
-            for net in arr:
+            for net in _items(p, WLAN_AVAILABLE_NETWORK_LIST, "Network", WLAN_AVAILABLE_NETWORK):
                 ssid = net.dot11Ssid.text()
                 if not ssid or net.dot11BssType != 1:  # skip hidden and ad-hoc
                     continue
@@ -364,10 +365,8 @@ class Wlan:
         if rc != ERROR_SUCCESS:
             raise OSError(rc, "WlanGetProfileList failed")
         try:
-            lst = ctypes.cast(p, POINTER(WLAN_PROFILE_INFO_LIST)).contents
-            n = lst.dwNumberOfItems
-            arr = ctypes.cast(ctypes.addressof(lst.ProfileInfo), POINTER(WLAN_PROFILE_INFO * n)).contents if n else []
-            return {i.strProfileName: int(i.dwFlags) for i in arr}
+            return {i.strProfileName: int(i.dwFlags)
+                    for i in _items(p, WLAN_PROFILE_INFO_LIST, "ProfileInfo", WLAN_PROFILE_INFO)}
         finally:
             _wlan.WlanFreeMemory(p)
 
