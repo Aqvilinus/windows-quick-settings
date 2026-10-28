@@ -1,0 +1,37 @@
+# Weekly version updates: one grouped pull request per ecosystem, only for releases at least a week old.
+# The Build workflow checks every PR (ruff, tests, a full build with --require-hashes).
+version: 2
+updates:
+  # actions are pinned by commit SHA; Dependabot moves the SHA and the version comment together
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # requirements.txt pins every wheel with its sha256; the PR updates the hashes too. Packages must stay
+  # available for Decky's Python (cp314 / win_amd64), which the build in the PR checks.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ["*"]
+
+  # @decky/* and the rollup build (pnpm-lock.yaml)
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      frontend:
+        patterns: ["*"]
