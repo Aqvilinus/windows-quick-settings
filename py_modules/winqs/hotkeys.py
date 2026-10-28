@@ -22,7 +22,6 @@ from ctypes import wintypes
 import psutil
 
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
-_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 WINEVENTPROC = ctypes.WINFUNCTYPE(None, wintypes.HANDLE, wintypes.DWORD, wintypes.HWND, wintypes.LONG,
                                   wintypes.LONG, wintypes.DWORD, wintypes.DWORD)
@@ -45,7 +44,6 @@ _user32.UnhookWinEvent.restype = wintypes.BOOL
 _user32.GetForegroundWindow.restype = wintypes.HWND
 _user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
 _user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-_kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
@@ -145,7 +143,7 @@ class MenuHotkeys:
     def _run(self):
         msg = wintypes.MSG()
         _user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 0)  # create this thread's message queue
-        self._tid = _kernel32.GetCurrentThreadId()
+        self._tid = threading.get_native_id()  # the Win32 thread id PostThreadMessageW needs
         self._ready.set()
         while _user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
             try:
