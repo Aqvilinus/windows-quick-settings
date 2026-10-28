@@ -172,7 +172,8 @@ def _items(p, list_type, field, item_type):
 
 
 class Wlan:
-    def __init__(self):
+    def __init__(self, on_event=None):
+        self._on_event = on_event  # called on Windows' thread after a scan finished or a connect outcome arrived
         self.handle = wintypes.HANDLE()
         ver = wintypes.DWORD()
         check(_wlan.WlanOpenHandle(2, None, byref(ver), byref(self.handle)), "WlanOpenHandle")
@@ -201,12 +202,16 @@ class Wlan:
                 self.interface_changed = True
             elif code in (ACM_SCAN_COMPLETE, ACM_SCAN_FAIL):
                 self.scan_done.set()
+                if self._on_event:
+                    self._on_event()
             elif code in (ACM_CONNECTION_COMPLETE, ACM_CONNECTION_ATTEMPT_FAIL) and d.pData \
                     and d.dwDataSize >= ctypes.sizeof(WLAN_CONNECTION_NOTIFICATION_DATA):
                 c = ctypes.cast(d.pData, POINTER(WLAN_CONNECTION_NOTIFICATION_DATA)).contents
                 ok = code == ACM_CONNECTION_COMPLETE and c.wlanReasonCode == 0
                 with self._conn_lock:
                     self._conn_result[c.dot11Ssid.text()] = (ok, int(c.wlanReasonCode))
+                if self._on_event:
+                    self._on_event()
         except Exception:  # noqa: BLE001 - never raise into the WLAN service thread
             self.dirty = True
 

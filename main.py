@@ -4,6 +4,7 @@ Wi-Fi, Bluetooth, audio, display and frame limit controls on Windows for Steam's
 Every system call runs on a single dedicated thread; see py_modules/winqs/service.py.
 """
 import asyncio
+import contextlib
 import threading
 
 import decky
@@ -47,6 +48,18 @@ class Plugin:
     def _call(self, method, *args, timeout=40):
         return self._guard(method, self._run(method, *args, timeout=timeout))
 
+    async def _wlan_wait(self, ready, timeout):
+        """Wait until ready() is true, checked again on every WLAN notification (scan done, connect outcome), or until
+        the timeout: no thread and no polling while waiting."""
+        async def until():
+            while not ready():
+                self._wlan_changed.clear()
+                if ready():  # a notification may have come in between
+                    return
+                await self._wlan_changed.wait()
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(until(), timeout)
+
     # ---- API used by the frontend ---------------------------------------------------
     async def get_state(self):
         return await self._call("state")
@@ -79,7 +92,7 @@ class Plugin:
                 await self._run("wifi_scan_start", timeout=10)
                 done = self.svc.scan_event()
                 if done is not None:
-                    await asyncio.to_thread(done.wait, 4.0)
+                    await self._wlan_wait(done.is_set, 4.0)
                 else:
                     await asyncio.sleep(3.0)
             return await self._run("wifi_networks", timeout=10)
@@ -94,18 +107,19 @@ class Plugin:
             prep = await self._run("wifi_connect_start", ssid, password or None, timeout=15)
             if prep.get("done"):
                 return prep["result"]
-            loop = asyncio.get_running_loop()
-            deadline = loop.time() + 20
-            next_poll = loop.time() + 1
             ok, reason = False, None
-            while loop.time() < deadline:
-                await asyncio.sleep(0.25)
-                outcome = self.svc.wifi_connect_result(ssid)
-                if outcome is not None:
-                    ok, reason = outcome
-                    break
-                if not self.svc.wlan_notifications() and loop.time() >= next_poll:
-                    next_poll = loop.time() + 1
+            if self.svc.wlan_notifications():
+                outcome = None
+
+                def arrived():
+                    nonlocal outcome
+                    outcome = outcome or self.svc.wifi_connect_result(ssid)
+                    return outcome is not None
+                await self._wlan_wait(arrived, 20)
+                ok, reason = outcome or (False, None)
+            else:  # no notifications from Windows: look once a second
+                for _ in range(20):
+                    await asyncio.sleep(1)
                     if await self._run("wifi_is_connected", ssid, timeout=10):
                         ok = True
                         break
@@ -206,8 +220,9 @@ class Plugin:
 
     # ---- lifecycle --------------------------------------------------------------------
     async def _main(self):
-        self._service()
         self.loop = asyncio.get_running_loop()
+        self._wlan_changed = asyncio.Event()  # set (from Windows' WLAN thread) on a scan / connect notification
+        self._service().on_wlan_event = lambda: self.loop.call_soon_threadsafe(self._wlan_changed.set)
         try:
             self.hotkeys = MenuHotkeys(self._on_hotkey, log=decky.logger.warning)
         except Exception as e:  # noqa: BLE001

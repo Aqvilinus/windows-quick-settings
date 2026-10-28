@@ -67,6 +67,7 @@ class SystemService:
         self._bt_paired = bt.PairedDevices(self.log)  # kept current by Windows once first read
         self._bt_scan = bt.Scanner(self.log)
         self._bt_pairing = bt.Pairing(self.log)
+        self.on_wlan_event = None  # main.py: wakes its waits for a scan / connect outcome (called on Windows' thread)
 
     # ---- infrastructure -------------------------------------------------------------
     def _init_worker(self):
@@ -97,7 +98,7 @@ class SystemService:
 
     def _wl(self):
         if self._wlan is None:
-            self._wlan = Wlan()
+            self._wlan = Wlan(on_event=lambda: self.on_wlan_event and self.on_wlan_event())
         return self._wlan
 
     def _reset_wlan(self):
