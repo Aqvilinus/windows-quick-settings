@@ -1,6 +1,7 @@
-"""Default output / input device and volume through Windows Core Audio, with pycaw's interfaces (comtypes).
+"""Default output / input device and volume through Windows Core Audio, with pycaw (comtypes).
 
-IPolicyConfig.SetDefaultEndpoint is undocumented; it is what Windows' own sound settings use to switch devices.
+Switching the default device goes through pycaw's AudioUtilities.SetDefaultDevice (the undocumented
+IPolicyConfig.SetDefaultEndpoint that Windows' own sound settings use).
 """
 from . import com  # noqa: F401 - must come before comtypes: COM in this process is multithreaded (pywinrt needs it)
 
@@ -12,8 +13,8 @@ from comtypes.malloc import _CoTaskMemFree
 from pycaw.api.endpointvolume import IAudioEndpointVolume
 from pycaw.api.mmdeviceapi import IMMDeviceEnumerator
 from pycaw.api.mmdeviceapi.depend.structures import PROPERTYKEY
-from pycaw.api.policyconfig import IPolicyConfig, IPolicyConfigVista
-from pycaw.constants import CLSID_CPolicyConfigClient, CLSID_MMDeviceEnumerator
+from pycaw.constants import CLSID_MMDeviceEnumerator, ERole
+from pycaw.utils import AudioUtilities
 
 FLOW = {"output": 0, "input": 1}  # eRender, eCapture
 E_MULTIMEDIA = 1
@@ -21,8 +22,7 @@ E_NOTFOUND = -2147023728  # 0x80070490: no default device of this kind
 DEVICE_STATE_ACTIVE = 1
 STGM_READ = 0
 VT_LPWSTR = 31
-ROLES = (0, 1, 2)  # eConsole, eMultimedia, eCommunications: switch all three, like Windows does
-CLSID_PolicyConfigVista = GUID("{294935CE-F637-4E7C-A41B-AB255460B862}")
+ROLES = [ERole.eConsole, ERole.eMultimedia, ERole.eCommunications]  # switch all three, like Windows does
 PKEY_Device_FriendlyName = ("{A45C254E-DF1C-4EFD-8020-67D146A850E0}", 14)
 
 
@@ -109,12 +109,7 @@ def set_default(flow, dev_id):
     """Make dev_id the default device of its flow for every role; returns the default id read back."""
     if dev_id.lower() not in {d["id"].lower() for d in devices(flow)}:
         raise ValueError("audio device is not active: %s" % dev_id)
-    try:
-        cfg = comtypes.CoCreateInstance(CLSID_CPolicyConfigClient, IPolicyConfig, CLSCTX_ALL)
-    except COMError:
-        cfg = comtypes.CoCreateInstance(CLSID_PolicyConfigVista, IPolicyConfigVista, CLSCTX_ALL)
-    for role in ROLES:
-        cfg.SetDefaultEndpoint(dev_id, role)
+    AudioUtilities.SetDefaultDevice(dev_id, roles=ROLES)
     now = next((d for d in devices(flow) if d["default"]), None)
     if not now or now["id"].lower() != dev_id.lower():
         raise RuntimeError("Windows did not switch the default %s device" % flow)
