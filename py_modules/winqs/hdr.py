@@ -7,6 +7,8 @@ GET_ADVANCED_COLOR_INFO (type 9). Writes SET_HDR_STATE (type 16), falling back t
 import ctypes
 from ctypes import byref, sizeof, wintypes
 
+from .com import check, sig
+
 _user32 = ctypes.WinDLL("user32")
 
 ERROR_INSUFFICIENT_BUFFER = 122
@@ -66,15 +68,13 @@ class SET_STATE(ctypes.Structure):
 
 assert sizeof(PATH_INFO) == 72 and sizeof(MODE_INFO) == 64 and sizeof(COLOR_INFO_2) == 36 and sizeof(SET_STATE) == 24
 
-_user32.GetDisplayConfigBufferSizes.argtypes = [ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32)]
-_user32.GetDisplayConfigBufferSizes.restype = ctypes.c_long
-_user32.QueryDisplayConfig.argtypes = [ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32), ctypes.c_void_p,
-                                       ctypes.POINTER(ctypes.c_uint32), ctypes.c_void_p, ctypes.c_void_p]
-_user32.QueryDisplayConfig.restype = ctypes.c_long
-_user32.DisplayConfigGetDeviceInfo.argtypes = [ctypes.c_void_p]
-_user32.DisplayConfigGetDeviceInfo.restype = ctypes.c_long
-_user32.DisplayConfigSetDeviceInfo.argtypes = [ctypes.c_void_p]
-_user32.DisplayConfigSetDeviceInfo.restype = ctypes.c_long
+sig(_user32.GetDisplayConfigBufferSizes, ctypes.c_long,
+    ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32))
+sig(_user32.QueryDisplayConfig, ctypes.c_long,
+    ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32), ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32), ctypes.c_void_p,
+    ctypes.c_void_p)
+sig(_user32.DisplayConfigGetDeviceInfo, ctypes.c_long, ctypes.c_void_p)
+sig(_user32.DisplayConfigSetDeviceInfo, ctypes.c_long, ctypes.c_void_p)
 
 
 def _target():
@@ -87,9 +87,8 @@ def active_path():
     """DisplayConfig path (PATH_INFO) of the built-in panel, else of the first active display."""
     for _ in range(3):  # the path count can change between the two calls
         n_path, n_mode = ctypes.c_uint32(), ctypes.c_uint32()
-        rc = _user32.GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, byref(n_path), byref(n_mode))
-        if rc:
-            raise OSError(rc, "GetDisplayConfigBufferSizes failed")
+        check(_user32.GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, byref(n_path), byref(n_mode)),
+              "GetDisplayConfigBufferSizes")
         paths, modes = (PATH_INFO * n_path.value)(), (MODE_INFO * n_mode.value)()
         rc = _user32.QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, byref(n_path), paths, byref(n_mode), modes, None)
         if rc == ERROR_INSUFFICIENT_BUFFER:
@@ -113,9 +112,7 @@ def state():
         on = bool(v & (1 << 5)) or info2.activeColorMode == COLOR_MODE_HDR  # highDynamicRangeUserEnabled
         return {"supported": supported, "on": on and supported}
     info = COLOR_INFO(HEADER(GET_ADVANCED_COLOR_INFO, sizeof(COLOR_INFO), adapter, tid))
-    rc = _user32.DisplayConfigGetDeviceInfo(byref(info))
-    if rc:
-        raise OSError(rc, "DisplayConfigGetDeviceInfo failed")
+    check(_user32.DisplayConfigGetDeviceInfo(byref(info)), "DisplayConfigGetDeviceInfo")
     return {"supported": bool(info.value & 1), "on": bool(info.value & 2)}
 
 
@@ -126,7 +123,5 @@ def set_enabled(on):
     st = SET_STATE(HEADER(SET_HDR_STATE, sizeof(SET_STATE), adapter, tid), 1 if on else 0)
     if _user32.DisplayConfigSetDeviceInfo(byref(st)) != 0:
         st = SET_STATE(HEADER(SET_ADVANCED_COLOR_STATE, sizeof(SET_STATE), adapter, tid), 1 if on else 0)
-        rc = _user32.DisplayConfigSetDeviceInfo(byref(st))
-        if rc:
-            raise OSError(rc, "DisplayConfigSetDeviceInfo failed")
+        check(_user32.DisplayConfigSetDeviceInfo(byref(st)), "DisplayConfigSetDeviceInfo")
     return state()

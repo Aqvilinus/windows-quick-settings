@@ -21,29 +21,24 @@ from ctypes import wintypes
 
 import psutil
 
+from .com import sig
+
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 
 WINEVENTPROC = ctypes.WINFUNCTYPE(None, wintypes.HANDLE, wintypes.DWORD, wintypes.HWND, wintypes.LONG,
                                   wintypes.LONG, wintypes.DWORD, wintypes.DWORD)
 
-_user32.RegisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]
-_user32.RegisterHotKey.restype = wintypes.BOOL
-_user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
-_user32.UnregisterHotKey.restype = wintypes.BOOL
-_user32.GetMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
-_user32.GetMessageW.restype = wintypes.BOOL
-_user32.PeekMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT, wintypes.UINT]
-_user32.PeekMessageW.restype = wintypes.BOOL
-_user32.PostThreadMessageW.argtypes = [wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-_user32.PostThreadMessageW.restype = wintypes.BOOL
-_user32.SetWinEventHook.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.HMODULE, WINEVENTPROC,
-                                    wintypes.DWORD, wintypes.DWORD, wintypes.DWORD]
-_user32.SetWinEventHook.restype = wintypes.HANDLE
-_user32.UnhookWinEvent.argtypes = [wintypes.HANDLE]
-_user32.UnhookWinEvent.restype = wintypes.BOOL
+sig(_user32.RegisterHotKey, wintypes.BOOL, wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT)
+sig(_user32.UnregisterHotKey, wintypes.BOOL, wintypes.HWND, ctypes.c_int)
+sig(_user32.GetMessageW, wintypes.BOOL, ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT)
+sig(_user32.PeekMessageW, wintypes.BOOL,
+    ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT, wintypes.UINT)
+sig(_user32.PostThreadMessageW, wintypes.BOOL, wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+sig(_user32.SetWinEventHook, wintypes.HANDLE,
+    wintypes.DWORD, wintypes.DWORD, wintypes.HMODULE, WINEVENTPROC, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD)
+sig(_user32.UnhookWinEvent, wintypes.BOOL, wintypes.HANDLE)
 _user32.GetForegroundWindow.restype = wintypes.HWND
-_user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-_user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+sig(_user32.GetWindowThreadProcessId, wintypes.DWORD, wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
 
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012

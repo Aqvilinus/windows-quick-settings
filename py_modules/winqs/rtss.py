@@ -19,6 +19,8 @@ import winreg
 import psutil
 from ctypes import byref, c_bool, c_char_p, c_int32, c_uint32, c_void_p
 
+from .com import sig
+
 TASK = "WinQS RTSS"
 
 
@@ -89,10 +91,8 @@ class RtssFrameLimit:
             d = ctypes.WinDLL(HOOKS)
             d.LoadProfile.argtypes = [c_char_p]
             d.SaveProfile.argtypes = [c_char_p]
-            d.GetProfileProperty.argtypes = [c_char_p, c_void_p, c_uint32]
-            d.GetProfileProperty.restype = c_bool
-            d.SetProfileProperty.argtypes = [c_char_p, c_void_p, c_uint32]
-            d.SetProfileProperty.restype = c_bool
+            sig(d.GetProfileProperty, c_bool, c_char_p, c_void_p, c_uint32)
+            sig(d.SetProfileProperty, c_bool, c_char_p, c_void_p, c_uint32)
             d.UpdateProfiles.argtypes = []
             self._dll = d
         return self._dll

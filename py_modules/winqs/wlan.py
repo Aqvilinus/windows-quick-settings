@@ -4,7 +4,7 @@ import threading
 from ctypes import POINTER, byref, c_void_p, wintypes
 from xml.sax.saxutils import escape
 
-from .com import GUID
+from .com import GUID, check, sig
 
 _wlan = ctypes.WinDLL("wlanapi")
 
@@ -97,14 +97,13 @@ ACM_SCAN_LIST_REFRESH = 26
 _DIRTY_CODES = {ACM_SCAN_COMPLETE, ACM_SCAN_FAIL, ACM_CONNECTION_COMPLETE, ACM_CONNECTION_ATTEMPT_FAIL,
                 ACM_INTERFACE_ARRIVAL, ACM_INTERFACE_REMOVAL, ACM_DISCONNECTED, ACM_SCAN_LIST_REFRESH}
 
-_wlan.WlanRegisterNotification.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.BOOL, WLAN_NOTIFICATION_CALLBACK,
-                                           c_void_p, c_void_p, POINTER(wintypes.DWORD)]
-_wlan.WlanRegisterNotification.restype = wintypes.DWORD
+sig(_wlan.WlanRegisterNotification, wintypes.DWORD,
+    wintypes.HANDLE, wintypes.DWORD, wintypes.BOOL, WLAN_NOTIFICATION_CALLBACK, c_void_p, c_void_p,
+    POINTER(wintypes.DWORD))
 _wlan.WlanOpenHandle.argtypes = [wintypes.DWORD, c_void_p, POINTER(wintypes.DWORD), POINTER(wintypes.HANDLE)]
 _wlan.WlanCloseHandle.argtypes = [wintypes.HANDLE, c_void_p]
 _wlan.WlanEnumInterfaces.argtypes = [wintypes.HANDLE, c_void_p, POINTER(c_void_p)]
-_wlan.WlanFreeMemory.argtypes = [c_void_p]
-_wlan.WlanFreeMemory.restype = None
+sig(_wlan.WlanFreeMemory, None, c_void_p)
 _wlan.WlanQueryInterface.argtypes = [wintypes.HANDLE, POINTER(GUID), wintypes.DWORD, c_void_p,
                                      POINTER(wintypes.DWORD), POINTER(c_void_p), POINTER(wintypes.DWORD)]
 _wlan.WlanScan.argtypes = [wintypes.HANDLE, POINTER(GUID), c_void_p, c_void_p, c_void_p]
@@ -115,8 +114,7 @@ _wlan.WlanSetProfile.argtypes = [wintypes.HANDLE, POINTER(GUID), wintypes.DWORD,
                                  wintypes.BOOL, c_void_p, POINTER(wintypes.DWORD)]
 _wlan.WlanDeleteProfile.argtypes = [wintypes.HANDLE, POINTER(GUID), wintypes.LPCWSTR, c_void_p]
 _wlan.WlanGetProfileList.argtypes = [wintypes.HANDLE, POINTER(GUID), c_void_p, POINTER(c_void_p)]
-_wlan.WlanReasonCodeToString.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.LPWSTR, c_void_p]
-_wlan.WlanReasonCodeToString.restype = wintypes.DWORD
+sig(_wlan.WlanReasonCodeToString, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.LPWSTR, c_void_p)
 
 
 def reason_text(code):
@@ -177,9 +175,7 @@ class Wlan:
     def __init__(self):
         self.handle = wintypes.HANDLE()
         ver = wintypes.DWORD()
-        rc = _wlan.WlanOpenHandle(2, None, byref(ver), byref(self.handle))
-        if rc != ERROR_SUCCESS:
-            raise OSError(rc, "WlanOpenHandle failed")
+        check(_wlan.WlanOpenHandle(2, None, byref(ver), byref(self.handle)), "WlanOpenHandle")
         # Change notifications: the callback runs on a WLAN service thread and only records what
         # happened, so the network list is re-read only when something actually changed.
         self.dirty = True                 # network list / interface may have changed
@@ -235,9 +231,7 @@ class Wlan:
     def interface(self):
         """Return (GUID, description, state) of the first Wi-Fi interface, or None."""
         p = c_void_p()
-        rc = _wlan.WlanEnumInterfaces(self.handle, None, byref(p))
-        if rc != ERROR_SUCCESS:
-            raise OSError(rc, "WlanEnumInterfaces failed")
+        check(_wlan.WlanEnumInterfaces(self.handle, None, byref(p)), "WlanEnumInterfaces")
         try:
             arr = _items(p, WLAN_INTERFACE_INFO_LIST, "InterfaceInfo", WLAN_INTERFACE_INFO)
             if not arr:
@@ -297,14 +291,10 @@ class Wlan:
 
     def connect_profile(self, guid, profile):
         params = WLAN_CONNECTION_PARAMETERS(0, profile, None, None, 1, 0)  # wlan_connection_mode_profile, infrastructure
-        rc = _wlan.WlanConnect(self.handle, byref(guid), byref(params), None)
-        if rc != ERROR_SUCCESS:
-            raise OSError(rc, "WlanConnect failed")
+        check(_wlan.WlanConnect(self.handle, byref(guid), byref(params), None), "WlanConnect")
 
     def disconnect(self, guid):
-        rc = _wlan.WlanDisconnect(self.handle, byref(guid), None)
-        if rc != ERROR_SUCCESS:
-            raise OSError(rc, "WlanDisconnect failed")
+        check(_wlan.WlanDisconnect(self.handle, byref(guid), None), "WlanDisconnect")
 
     def set_profile(self, guid, xml):
         reason = wintypes.DWORD()
@@ -320,9 +310,7 @@ class Wlan:
     def profile_flags(self, guid):
         """{profile name: flags} of the saved Wi-Fi profiles (flag 1 = set by group policy, read-only)."""
         p = c_void_p()
-        rc = _wlan.WlanGetProfileList(self.handle, byref(guid), None, byref(p))
-        if rc != ERROR_SUCCESS:
-            raise OSError(rc, "WlanGetProfileList failed")
+        check(_wlan.WlanGetProfileList(self.handle, byref(guid), None, byref(p)), "WlanGetProfileList")
         try:
             return {i.strProfileName: int(i.dwFlags)
                     for i in _items(p, WLAN_PROFILE_INFO_LIST, "ProfileInfo", WLAN_PROFILE_INFO)}

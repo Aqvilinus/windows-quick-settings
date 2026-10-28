@@ -17,6 +17,17 @@ _combase.RoInitialize.argtypes = [c_int32]
 _combase.RoInitialize.restype = c_long
 
 
+def sig(func, restype, *argtypes):
+    """Declare a ctypes function's return and argument types."""
+    func.restype, func.argtypes = restype, list(argtypes)
+
+
+def check(rc, what):
+    """Raise OSError for a Windows error code (0 = success), e.g. check(WlanScan(...), "WlanScan")."""
+    if rc:
+        raise OSError(rc, what + " failed")
+
+
 class GUID(ctypes.Structure):
     _fields_ = [("Data1", ctypes.c_uint32), ("Data2", ctypes.c_uint16), ("Data3", ctypes.c_uint16),
                 ("Data4", ctypes.c_ubyte * 8)]

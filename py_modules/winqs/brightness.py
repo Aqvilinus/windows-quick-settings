@@ -10,7 +10,7 @@ from ctypes import POINTER, byref, c_void_p, wintypes
 
 from winrt.windows.system.power import PowerManager, PowerSupplyStatus
 
-from .com import GUID
+from .com import GUID, check, sig
 
 _powr = ctypes.WinDLL("powrprof")
 _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -18,18 +18,15 @@ _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
 GUID_VIDEO_SUBGROUP = "7516B95F-F776-4464-8C53-06167F40CC99"
 GUID_VIDEO_BRIGHTNESS = "ADED5E82-B909-4619-9949-F5D71DAC0BCB"
 
-_powr.PowerGetActiveScheme.argtypes = [c_void_p, POINTER(POINTER(GUID))]
-_powr.PowerGetActiveScheme.restype = wintypes.DWORD
-_powr.PowerSetActiveScheme.argtypes = [c_void_p, POINTER(GUID)]
-_powr.PowerSetActiveScheme.restype = wintypes.DWORD
+sig(_powr.PowerGetActiveScheme, wintypes.DWORD, c_void_p, POINTER(POINTER(GUID)))
+sig(_powr.PowerSetActiveScheme, wintypes.DWORD, c_void_p, POINTER(GUID))
 for _name in ("PowerReadACValueIndex", "PowerReadDCValueIndex"):
     getattr(_powr, _name).argtypes = [c_void_p, POINTER(GUID), POINTER(GUID), POINTER(GUID), POINTER(wintypes.DWORD)]
     getattr(_powr, _name).restype = wintypes.DWORD
 for _name in ("PowerWriteACValueIndex", "PowerWriteDCValueIndex"):
     getattr(_powr, _name).argtypes = [c_void_p, POINTER(GUID), POINTER(GUID), POINTER(GUID), wintypes.DWORD]
     getattr(_powr, _name).restype = wintypes.DWORD
-_k32.LocalFree.argtypes = [c_void_p]
-_k32.LocalFree.restype = c_void_p
+sig(_k32.LocalFree, c_void_p, c_void_p)
 
 
 def _on_ac():
@@ -39,9 +36,7 @@ def _on_ac():
 
 def _active_scheme():
     p = POINTER(GUID)()
-    rc = _powr.PowerGetActiveScheme(None, byref(p))
-    if rc != 0:
-        raise OSError(rc, "PowerGetActiveScheme failed")
+    check(_powr.PowerGetActiveScheme(None, byref(p)), "PowerGetActiveScheme")
     g = GUID()
     ctypes.memmove(byref(g), p, ctypes.sizeof(GUID))
     _k32.LocalFree(p)
@@ -52,9 +47,7 @@ def get_power_setting():
     scheme, sub, setting = _active_scheme(), GUID.of(GUID_VIDEO_SUBGROUP), GUID.of(GUID_VIDEO_BRIGHTNESS)
     v = wintypes.DWORD()
     fn = _powr.PowerReadACValueIndex if _on_ac() else _powr.PowerReadDCValueIndex
-    rc = fn(None, byref(scheme), byref(sub), byref(setting), byref(v))
-    if rc != 0:
-        raise OSError(rc, "PowerRead*ValueIndex failed")
+    check(fn(None, byref(scheme), byref(sub), byref(setting), byref(v)), "PowerRead*ValueIndex")
     return int(v.value)
 
 
@@ -66,11 +59,11 @@ class DISPLAY_BRIGHTNESS(ctypes.Structure):
     _fields_ = [("ucDisplayPolicy", ctypes.c_ubyte), ("ucACBrightness", ctypes.c_ubyte), ("ucDCBrightness", ctypes.c_ubyte)]
 
 
-_k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
-_k32.CreateFileW.restype = wintypes.HANDLE
-_k32.DeviceIoControl.argtypes = [wintypes.HANDLE, wintypes.DWORD, c_void_p, wintypes.DWORD, c_void_p, wintypes.DWORD,
-                                 POINTER(wintypes.DWORD), c_void_p]
-_k32.DeviceIoControl.restype = wintypes.BOOL
+sig(_k32.CreateFileW, wintypes.HANDLE,
+    wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+sig(_k32.DeviceIoControl, wintypes.BOOL,
+    wintypes.HANDLE, wintypes.DWORD, c_void_p, wintypes.DWORD, c_void_p, wintypes.DWORD, POINTER(wintypes.DWORD),
+    c_void_p)
 _k32.CloseHandle.argtypes = [wintypes.HANDLE]
 INVALID_HANDLE = wintypes.HANDLE(-1).value
 
@@ -103,10 +96,6 @@ def set_level(value):
     value = max(0, min(100, int(value)))
     scheme, sub, setting = _active_scheme(), GUID.of(GUID_VIDEO_SUBGROUP), GUID.of(GUID_VIDEO_BRIGHTNESS)
     fn = _powr.PowerWriteACValueIndex if _on_ac() else _powr.PowerWriteDCValueIndex
-    rc = fn(None, byref(scheme), byref(sub), byref(setting), value)
-    if rc != 0:
-        raise OSError(rc, "PowerWrite*ValueIndex failed")
-    rc = _powr.PowerSetActiveScheme(None, byref(scheme))
-    if rc != 0:
-        raise OSError(rc, "PowerSetActiveScheme failed")
+    check(fn(None, byref(scheme), byref(sub), byref(setting), value), "PowerWrite*ValueIndex")
+    check(_powr.PowerSetActiveScheme(None, byref(scheme)), "PowerSetActiveScheme")
     return value
