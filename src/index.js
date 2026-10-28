@@ -13,7 +13,7 @@ import { addEventListener, definePlugin, removeEventListener } from "@decky/api"
 import manifest from "@decky/manifest";
 import * as DFL from "@decky/ui";
 import { Fragment, jsx } from "react/jsx-runtime";
-import { LOG, be, call, lazy } from "./backend.js";
+import { LOG, be, call, fnSrc, lazy } from "./backend.js";
 import { deckPerfParts } from "./frame.js";
 import { steamFpsRowTypes } from "./overlay.js";
 import { injectStatus, installPatch, setStatus, stopped, uninstallPatch } from "./qam.js";
@@ -90,8 +90,10 @@ function gameOverlayPids() {
     catch { return []; }
 }
 // Steam's own MobX `reaction` (Steam ships one MobX instance; never bundle a second one).
-const findMobxReaction = lazy(() => DFL.findModuleExport((e) => typeof e === "function"
-    && /!=null\?\w+:"Reaction"/.test(String(e)) && String(e).includes("compareStructural")));
+const findMobxReaction = lazy(() => DFL.findModuleExport((e) => {
+    const src = fnSrc(e);
+    return /!=null\?\w+:"Reaction"/.test(src) && src.includes("compareStructural");
+}));
 let sentOverlays = null;
 let overlayRetry = null;
 async function syncOverlays(force) {

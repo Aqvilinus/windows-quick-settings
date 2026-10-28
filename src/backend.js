@@ -39,6 +39,9 @@ export async function call(fn, ...args) {
     return r.result;
 }
 // The first call runs fn; its result (null on a miss or an error) is kept for the plugin's lifetime.
+// Source text of a function ("" for anything else): Steam's minified parts are recognised by what their source contains.
+export const fnSrc = (f) => (typeof f === "function" ? Function.prototype.toString.call(f) : "");
+
 export function lazy(fn, warning) {
     let value;
     const get = () => {

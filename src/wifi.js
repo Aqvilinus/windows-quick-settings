@@ -1,7 +1,7 @@
 import * as DFL from "@decky/ui";
 import { useEffect, useRef, useState } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
-import { LOG, be, call, lazy } from "./backend.js";
+import { LOG, be, call, fnSrc, lazy } from "./backend.js";
 import { L, S, T, errText, toast } from "./strings.js";
 import { DIM, act, dialog, dimIf, emit, icon, modalParent, pending, pressable, refresh, showModalHere, signalIcon, spinner, store, useStableOrder, useStore, withPending } from "./ui.js";
 
@@ -61,8 +61,7 @@ let connectivityReg = null;
 const steamNetStore = lazy(() => DFL.findModule((m) => m?.SystemNetworkStore)?.SystemNetworkStore);
 // fn(ownerWindow, manualUrl?) that shows Steam's CaptivePortalDialog (found by its prop name, not a minified id)
 export const steamPortalDialog = lazy(() => DFL.findModuleExport((e) => {
-    if (typeof e !== "function") return false;
-    const src = Function.prototype.toString.call(e);
+    const src = fnSrc(e);
     return src.length < 400 && src.includes("strManualCaptivePortalURL");
 }));
 const connectivity = () => steamNetStore()?.connectivityTestState || connectivityEvent;

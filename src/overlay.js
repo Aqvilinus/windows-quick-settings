@@ -2,7 +2,7 @@ import * as DFL from "@decky/ui";
 import * as R from "react";
 import { useEffect, useState } from "react";
 import { jsx } from "react/jsx-runtime";
-import { LOG, be, call, lazy } from "./backend.js";
+import { LOG, be, call, fnSrc, lazy } from "./backend.js";
 import { L, T } from "./strings.js";
 import { Row, clamp, dialog, latestWins, showModalHere } from "./ui.js";
 
@@ -68,13 +68,13 @@ function perfLevelNames() {
 // rendering only Steam's FPS corner/contrast row components, found by their localization tokens. Anything
 // unexpected -> Steam's panel is rendered untouched.
 export const steamFpsRowTypes = lazy(() => {
-    const has = (tok) => (e) => typeof e === "function" && Function.prototype.toString.call(e).includes(tok);
+    const has = (tok) => (e) => fnSrc(e).includes(tok);
     const corner = DFL.findModuleExport(has("QuickAccess_Tab_Perf_FPS_Corner"));
     const contrast = DFL.findModuleExport(has("QuickAccess_Tab_Perf_FPS_Contrast"));
     return corner && contrast ? new Set([corner, contrast]) : null;
 });
 const isPureRenderFn = (t) => typeof t === "function" && !(t.prototype && t.prototype.isReactComponent)
-    && /^function\s*\w*\(\)\s*\{\s*return\b/.test(Function.prototype.toString.call(t));
+    && /^function\s*\w*\(\)\s*\{\s*return\b/.test(fnSrc(t));
 function onlyFpsRows(el, rows) { // true if this element tree renders nothing but Steam's FPS rows (at least one)
     let found = 0;
     const walk = (n) => {
@@ -101,7 +101,7 @@ function srcHas(t, needle) {
     if (typeof t !== "function") return false;
     let hit = srcHits.get(t);
     if (!hit) srcHits.set(t, (hit = {}));
-    if (!(needle in hit)) hit[needle] = Function.prototype.toString.call(t).includes(needle);
+    if (!(needle in hit)) hit[needle] = fnSrc(t).includes(needle);
     return hit[needle];
 }
 const isBatteryPanel = (t) => srcHas(t, "BatterySectionContainer") && !isPureRenderFn(t);
