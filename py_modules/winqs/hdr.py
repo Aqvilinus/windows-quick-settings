@@ -79,6 +79,12 @@ _user32.DisplayConfigSetDeviceInfo.restype = ctypes.c_long
 
 def _target():
     """(adapterId, target id) of the built-in panel, else of the first active display."""
+    t = active_path().targetInfo
+    return t.adapterId, t.id
+
+
+def active_path():
+    """DisplayConfig path (PATH_INFO) of the built-in panel, else of the first active display."""
     for _ in range(3):  # the path count can change between the two calls
         n_path, n_mode = ctypes.c_uint32(), ctypes.c_uint32()
         rc = _user32.GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, byref(n_path), byref(n_mode))
@@ -93,8 +99,7 @@ def _target():
         active = paths[: n_path.value]
         if not active:
             raise RuntimeError("no active display")
-        p = next((x for x in active if x.targetInfo.outputTechnology == OUTPUT_TECH_INTERNAL), active[0])
-        return p.targetInfo.adapterId, p.targetInfo.id
+        return next((x for x in active if x.targetInfo.outputTechnology == OUTPUT_TECH_INTERNAL), active[0])
     raise RuntimeError("display configuration kept changing")
 
 
