@@ -52,8 +52,7 @@ def is_device_id(device_id):
 
 def _prop(info, key):
     try:
-        props = info.properties
-        return props.lookup(key) if props.has_key(key) else None
+        return info.properties.get(key)  # pywinrt maps are Python Mappings
     except Exception:  # noqa: BLE001 - a missing or odd property only loses the device type
         return None
 
