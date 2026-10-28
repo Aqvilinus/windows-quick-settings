@@ -24,7 +24,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 - Build: `python scripts/build.py` (options in its docstring). The zip's top folder must stay `windows-quick-settings/`: Decky keys settings and logs by folder name. `--local` refreshes this checkout's `py_modules/` (Decky loads the checkout); locked DLLs of the running plugin are renamed `*.old` and deleted by the next build. Restart the plugin's backend afterwards.
 - Node: portable v24 LTS in `C:\Users\Ivan\Tools\node` (not on PATH; `.nvmrc` = 24), pnpm through corepack (`packageManager` in package.json). pnpm 12 refuses packages younger than a day (minimumReleaseAge).
 - Releases: run the manual `Release` workflow on GitHub with a version.
-- Checks (CI runs ruff too): `ruff check main.py scripts py_modules/winqs` (rules in `ruff.toml`: errors and likely bugs only) and `actionlint` for the workflows; both are installed with winget.
+- Checks (CI runs them too): `python -I -m unittest discover -s tests`, `ruff check main.py scripts py_modules/winqs tests` (rules in `ruff.toml`: errors and likely bugs only) and `actionlint` for the workflows; both are installed with winget.
 - Testing on the device over Steam's CEF DevTools (reload the plugin, call the backend, open QAM tabs, gamepad buttons): see the `steam-cdp` skill.
 - Performance budget: `get_state` ~8 ms warm, idle CPU 0.
 

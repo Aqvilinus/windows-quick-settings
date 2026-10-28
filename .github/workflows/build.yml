@@ -46,7 +46,10 @@ jobs:
         shell: bash
         run: |
           python -m pip install --disable-pip-version-check -q ruff==0.17.1
-          python -m ruff check main.py scripts py_modules/winqs
+          python -m ruff check main.py scripts py_modules/winqs tests
+
+      - name: Test the backend logic that needs no hardware (tests/)
+        run: python -I -m unittest discover -s tests -v
 
       - name: Build
         shell: bash
