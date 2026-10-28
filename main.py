@@ -201,10 +201,11 @@ class Plugin:
         decky.logger.info("Windows Quick Settings backend started")
 
     async def _unload(self):
+        # both block (thread join, worker round trip), so they run off the event loop
         if self.hotkeys is not None:
-            self.hotkeys.close()
+            await asyncio.to_thread(self.hotkeys.close)
             self.hotkeys = None
         if self.svc is not None:
-            self.svc.shutdown()
+            await asyncio.to_thread(self.svc.shutdown)
             self.svc = None
         decky.logger.info("Windows Quick Settings backend stopped")

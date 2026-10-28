@@ -127,10 +127,21 @@ class IntelFrameLimit:
         try:
             self._open_once()
         finally:
-            if self._dev is None and self.error is None:
-                self.error = "frame limit unavailable"
+            if self._dev is None:
+                self.close()  # a session opened before the failure, so a retry doesn't leak one
+                if self.error is None:
+                    self.error = "frame limit unavailable"
             if self.error is not None:
                 self._error_time = time.monotonic()
+
+    def close(self):
+        """End the IGCL session (on the worker thread, which owns it)."""
+        if self._lib is not None and self._api.value:
+            try:
+                self._lib.ctlClose(self._api)
+            except Exception:  # noqa: BLE001 - driver gone: nothing left to close
+                pass
+        self._lib, self._api, self._dev = None, c_void_p(), None
 
     def _open_once(self):
         path = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "ControlLib.dll")
@@ -150,6 +161,7 @@ class IntelFrameLimit:
         if r:
             self.error = "ctlInit failed (0x%08x)" % r
             return
+        self._lib = lib  # session open: close() ends it; it is used only once _dev is set
         n = c_uint32(0)
         lib.ctlEnumerateDevices(self._api, byref(n), None)
         if not n.value:
@@ -167,7 +179,7 @@ class IntelFrameLimit:
                 continue
             for d in arr:
                 if d.FeatureType == CTL_3D_FEATURE_FRAME_LIMIT:
-                    self._lib, self._dev = lib, c_void_p(dev)
+                    self._dev = c_void_p(dev)
                     self.range = (int(d.Value.I.Range.min) or 30, int(d.Value.I.Range.max) or 300)
                     return
         self.error = "the driver has no frame limit"

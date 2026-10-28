@@ -65,7 +65,13 @@ class SystemService:
         return self.pool.submit(fn, *args)
 
     def shutdown(self):
+        """Blocks for up to 5 s: call it off the event loop (main.py uses asyncio.to_thread)."""
         def _close():
+            for step in (self._bt_pairing.cancel, self._bt_scan.stop, self._bt_paired.stop, self._frames.close):
+                try:
+                    step()
+                except Exception as e:  # noqa: BLE001 - close the rest anyway
+                    self.log("shutdown: %s failed: %r" % (getattr(step, "__qualname__", step), e))
             if self._wlan:
                 self._wlan.close()
                 self._wlan = None
