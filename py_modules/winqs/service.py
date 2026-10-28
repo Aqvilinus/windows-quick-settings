@@ -20,6 +20,7 @@ from .wlan import (SUPPORTED_NEW, WLAN_PROFILE_GROUP_POLICY, LocationBlocked, Wl
 WLAN_REOPEN_ERRORS = {6, 1702, 1722, 1726, 1727, 1753}
 SCAN_EVERY = 30         # s; only while Wi-Fi is on but not connected (a scan disturbs a connected link)
 NETWORKS_MAX_AGE = 20   # s; with notifications the list is re-read on changes, this is only a safety net
+BT_AUDIO_MAX_AGE = 10   # s; Bluetooth audio endpoints, otherwise re-read when a paired device's connection changes
 
 
 FLOWS = ("output", "input")
@@ -67,6 +68,7 @@ class SystemService:
         self._bt_paired = bt.PairedDevices(self.log)  # kept current by Windows once first read
         self._bt_scan = bt.Scanner(self.log)
         self._bt_pairing = bt.Pairing(self.log)
+        self._bt_audio, self._bt_audio_key, self._bt_audio_time = {}, None, 0.0
         self.on_wlan_event = None  # main.py: wakes its waits for a scan / connect outcome (called on Windows' thread)
 
     # ---- infrastructure -------------------------------------------------------------
@@ -319,11 +321,17 @@ class SystemService:
     # ---- Bluetooth -------------------------------------------------------------------
     def bluetooth_devices(self):
         devices = self._bt_paired.devices()
-        try:
-            bt_audio = {a["name"]: a for a in btaudio.list_audio_devices()}
-        except Exception as e:  # noqa: BLE001
-            self.log("audio endpoint enumeration failed: %s" % e)
-            bt_audio = {}
+        # the audio endpoints (~0.6 ms to list) are read again only when a paired device connects / disconnects,
+        # after an audio connect from the panel, or every BT_AUDIO_MAX_AGE seconds
+        key = tuple((d["id"], d["connected"]) for d in devices)
+        if key != self._bt_audio_key or time.monotonic() - self._bt_audio_time > BT_AUDIO_MAX_AGE:
+            try:
+                self._bt_audio = {a["name"]: a for a in btaudio.list_audio_devices()}
+            except Exception as e:  # noqa: BLE001
+                self.log("audio endpoint enumeration failed: %s" % e)
+                self._bt_audio = {}
+            self._bt_audio_key, self._bt_audio_time = key, time.monotonic()
+        bt_audio = self._bt_audio
         for d in devices:
             a = bt_audio.get(d["name"])
             d["audio_control"] = a is not None
@@ -333,6 +341,7 @@ class SystemService:
 
     def bluetooth_audio(self, name, connect):
         btaudio.set_connected(name, connect)
+        self._bt_audio_key = None  # read the endpoints again on the next poll
         return True
 
     # ---- Bluetooth search / pairing / removal (see bt.py) ----------------------------------------------------------
