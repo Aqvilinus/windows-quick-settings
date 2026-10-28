@@ -10,6 +10,7 @@ _wlan = ctypes.WinDLL("wlanapi")
 
 ERROR_SUCCESS = 0
 ERROR_ACCESS_DENIED = 5
+ERROR_NOT_FOUND = 1168
 
 
 class LocationBlocked(OSError):
@@ -312,7 +313,9 @@ class Wlan:
             raise OSError(rc, "WlanSetProfile failed (reason %d)" % reason.value)
 
     def delete_profile(self, guid, name):
-        return _wlan.WlanDeleteProfile(self.handle, byref(guid), name, None)
+        rc = _wlan.WlanDeleteProfile(self.handle, byref(guid), name, None)
+        if rc not in (ERROR_SUCCESS, ERROR_NOT_FOUND):  # already gone is fine
+            raise OSError(rc, "WlanDeleteProfile failed")
 
     def profile_flags(self, guid):
         """{profile name: flags} of the saved Wi-Fi profiles (flag 1 = set by group policy, read-only)."""

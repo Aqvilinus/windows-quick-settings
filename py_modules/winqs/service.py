@@ -277,8 +277,11 @@ class SystemService:
     def wifi_connect_finish(self, ssid, prep, ok, reason=None):
         if ok or self.wifi_is_connected(ssid):
             return {"ok": True}
-        if prep.get("created"):
-            self._wifi(lambda: self._wl().delete_profile(self._iface(), prep["profile"]))
+        if prep.get("created"):  # remove the profile the attempt added; a failure here must not hide the outcome
+            try:
+                self._wifi(lambda: self._wl().delete_profile(self._iface(), prep["profile"]))
+            except OSError as e:
+                self.log("removing the new Wi-Fi profile failed: %s" % e)
         # WLAN_REASON_CODE_MSMSEC_* (0x40000-0x4FFFF): the security handshake failed, i.e. most likely the key
         security = reason is not None and 0x40000 <= reason < 0x50000
         if prep.get("created") and prep.get("secured") and (reason is None or security):
@@ -303,9 +306,9 @@ class SystemService:
                 return {"ok": False, "reason": "not_saved"}
             if flags[name] & WLAN_PROFILE_GROUP_POLICY:
                 return {"ok": False, "reason": "group_policy"}
-            rc = wl.delete_profile(guid, name)
+            wl.delete_profile(guid, name)
             wl.dirty = True
-            return {"ok": rc == 0, "reason": None if rc == 0 else "error %d" % rc}
+            return {"ok": True}
         return self._wifi(go)
 
     def wifi_disconnect(self):
