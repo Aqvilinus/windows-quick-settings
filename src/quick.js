@@ -44,7 +44,8 @@ export function QuickSettings({ active }) {
             s.brightness != null && jsx(DFL.PanelSection, {
                 title: S.brightness(),
                 children: Row(jsx(ValueSlider, { id: "brightness", value: s.brightness, icon: icon("Brightness"),
-                    send: (v) => call(be.setBrightness, v) })),
+                    // each change re-applies the power scheme, which Windows announces to the whole system
+                    send: (v) => call(be.setBrightness, v), minGapMs: 150 })),
             }),
             (s.audio?.output || s.audio?.input) && jsxs(DFL.PanelSection, {
                 title: S.audio(),

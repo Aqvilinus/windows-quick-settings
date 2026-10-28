@@ -133,9 +133,10 @@ export function useStableOrder(keyOf) {
 }
 
 // "Latest value wins": at most one send(v) in flight, and only the newest value waiting behind it, so dragging a
-// slider across many steps sends the last one rather than each. Errors are shown as toasts.
-export function latestWins(send) {
-    let sending = false, waiting = false, wanted;
+// slider across many steps sends the last one rather than each. With minGapMs, sends are also at least that far
+// apart. Errors are shown as toasts.
+export function latestWins(send, minGapMs = 0) {
+    let sending = false, waiting = false, wanted, last = 0;
     return async (v) => {
         wanted = v;
         waiting = true;
@@ -143,7 +144,10 @@ export function latestWins(send) {
         sending = true;
         try {
             while (waiting) {
+                const wait = last + minGapMs - Date.now();
+                if (wait > 0) await DFL.sleep(wait);
                 waiting = false;
+                last = Date.now();
                 try { await send(wanted); }
                 catch (e) { toast(errText(e)); }
             }
@@ -155,12 +159,12 @@ export function latestWins(send) {
 // Slider that sends values to the backend without flooding it, and ignores polled values for a moment after the
 // user touched it.
 const lastTouch = {};
-export function ValueSlider({ id, value, icon, send }) {
+export function ValueSlider({ id, value, icon, send, minGapMs }) {
     const [local, setLocal] = useState(value);
     const sendRef = useRef(send);
     sendRef.current = send;
     const push = useRef(null);
-    push.current ??= latestWins((v) => sendRef.current(v));
+    push.current ??= latestWins((v) => sendRef.current(v), minGapMs);
     useEffect(() => {
         if (Date.now() - (lastTouch[id] || 0) > 1500) setLocal(value);
     }, [value]);
