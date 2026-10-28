@@ -1,5 +1,4 @@
 """Wi-Fi / Bluetooth radio on-off through WinRT Windows.Devices.Radios (pywinrt)."""
-import functools
 import time
 
 from winrt.windows.devices.radios import Radio, RadioKind, RadioState
@@ -9,6 +8,7 @@ CACHE_SECONDS = 30   # re-enumerate radios now and then (adapter added/removed)
 
 _cache = {}          # kind -> Radio
 _cache_time = 0.0
+_access_allowed = False
 
 
 def _name(enum_value):
@@ -16,9 +16,15 @@ def _name(enum_value):
     return enum_value.name.lower()
 
 
-@functools.cache
 def request_access():
-    return _name(Radio.request_access_async().get())
+    """Only a grant is remembered: after a denial Windows is asked again, so access given later in Settings
+    works without restarting the plugin (the call returns at once once the user has decided)."""
+    global _access_allowed
+    if _access_allowed:
+        return "allowed"
+    status = _name(Radio.request_access_async().get())
+    _access_allowed = status == "allowed"
+    return status
 
 
 def _fill_cache():
