@@ -15,6 +15,10 @@ on:
         type: boolean
         default: false
 
+# read-only by default; only the publish job may push the version commit, the tag and the release
+permissions:
+  contents: read
+
 concurrency:
   group: release
   cancel-in-progress: false
@@ -25,7 +29,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -60,9 +64,13 @@ jobs:
     env:
       VERSION: ${{ needs.check.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      # the commit that was built, not whatever main is now: the tag must point at the source of the zip.
+      # If main moved meanwhile, the version push below is rejected and nothing is tagged.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: windows-quick-settings
           path: out
@@ -89,7 +97,7 @@ jobs:
           git push origin "v$VERSION"
 
       - name: Publish the GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: v${{ env.VERSION }}
           name: v${{ env.VERSION }}
