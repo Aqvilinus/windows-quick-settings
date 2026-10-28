@@ -80,7 +80,7 @@ Decky Loader plugin that adds SteamOS-style system controls to Steam Big Picture
 ## Frame limit
 
 - **RTSS** (all APIs): `RTSSHooks64.dll` `LoadProfile("")` → `SetProfileProperty("FramerateLimit")` → `SaveProfile` → `UpdateProfiles`.
-  - Works unelevated after `setup_rtss.ps1` (Profiles ACL + "WinQS RTSS" logon task; the script finds RTSS in the registry itself and accepts only a signed `RTSS.exe` under Program Files). Only the owner runs it, from the Performance tab (UAC, `os.startfile(..., "runas")`). The plugin folder is user-writable, so the script is read at backend start and passed with `-EncodedCommand`, never run from disk, and the elevated side writes no log.
+  - Works unelevated after `setup_rtss.ps1` (write access to `Profiles\Global` only + "WinQS RTSS" logon task; the script finds RTSS in the registry itself and accepts only a signed `RTSS.exe` under Program Files). Only the owner runs it, from the Performance tab (UAC, `os.startfile(..., "runas")`). The plugin folder is user-writable, so the script is read at backend start and passed with `-EncodedCommand`, never run from disk, and the elevated side writes no log.
   - `RTSSHooks64.dll` is loaded by full path (its folder is searched for dependencies); don't add it to the process DLL path.
   - OneXConsole writes the same limit and kills RTSS when its OSD is turned off; `rtss_keepalive()` restarts it.
   - Keep RTSS's D3D12 OSD renderer enabled.

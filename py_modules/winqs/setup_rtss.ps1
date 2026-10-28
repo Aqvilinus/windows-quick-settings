@@ -1,9 +1,11 @@
 # One-time setup (run elevated) so the plugin, which runs without administrator rights, can use RTSS's
 # frame limiter for every game (DX9/11/12, Vulkan, OpenGL):
-#   1. the given user may change RTSS profiles (Profiles folder is admin-only by default);
+#   1. the given user may change RTSS's global profile, Profiles\Global, where the frame limit is (the folder is
+#      admin-only by default). Only that file: the elevated RTSS reads the other files there too (its Config,
+#      per-game profiles), and RTSS rewrites Global in place, so a grant on the file itself stays;
 #   2. RTSS (requireAdministrator) starts elevated at logon through a scheduled task, and the same user may
 #      start that task on demand (schtasks /run), so the plugin can launch RTSS without a UAC prompt.
-# Nothing else is changed. Undo: Unregister-ScheduledTask -TaskName 'WinQS RTSS'; icacls <Profiles> /remove <user>
+# Nothing else is changed. Undo: Unregister-ScheduledTask -TaskName 'WinQS RTSS'; icacls <Profiles>\Global /remove <user>
 #
 # The plugin folder is writable by the user, so this file is never run from disk: service.setup_rtss() reads it when
 # the backend starts and passes it to the elevated PowerShell with -EncodedCommand. The script trusts no path it is
@@ -30,9 +32,15 @@ $sig = Get-AuthenticodeSignature -LiteralPath $exe
 if ($sig.Status -ne 'Valid') { throw "RTSS.exe is not validly signed ($($sig.Status))" }
 $user = (New-Object System.Security.Principal.SecurityIdentifier($UserSid)).Translate([System.Security.Principal.NTAccount]).Value
 
-# 1. profile access for this user only
-& "$env:SystemRoot\System32\icacls.exe" (Join-Path $rtss 'Profiles') /grant "*${UserSid}:(OI)(CI)M" | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "icacls failed ($LASTEXITCODE)" }
+# 1. this user may change the global profile, and nothing else in RTSS's folder
+$icacls = "$env:SystemRoot\System32\icacls.exe"
+$profiles = Join-Path $rtss 'Profiles'
+$globalProfile = Join-Path $profiles 'Global'
+if (-not (Test-Path -LiteralPath $globalProfile -PathType Leaf)) { throw "RTSS has no global profile yet: start RTSS once" }
+& $icacls $profiles /remove:g "*$UserSid" | Out-Null  # an earlier version of this setup granted the whole folder
+if ($LASTEXITCODE -ne 0) { throw "icacls /remove failed ($LASTEXITCODE)" }
+& $icacls $globalProfile /grant "*${UserSid}:(M)" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "icacls /grant failed ($LASTEXITCODE)" }
 
 # 2. elevated autostart at this user's logon
 $action = New-ScheduledTaskAction -Execute $exe -WorkingDirectory $rtss
