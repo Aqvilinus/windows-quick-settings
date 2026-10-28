@@ -55,9 +55,8 @@ def is_enabled():
     return inner[4:6] == bytes([0x10, 0x00])
 
 
-def build(on, now=None):
-    now = time.time() if now is None else now
-    unix = int(now)
+def build(on):
+    unix = int(time.time())
     filetime = (unix + 11644473600) * 10_000_000
     inner = HEADER + (bytes([0x10, 0x00]) if on else b"") + bytes([0xD0, 0x0A, 0x02, 0xC6, 0x14]) + _leb128(filetime) + b"\x00"
     return (HEADER + bytes([0x0A, 0x02, 0x01, 0x00, 0x2A, 0x06]) + _leb128(unix)

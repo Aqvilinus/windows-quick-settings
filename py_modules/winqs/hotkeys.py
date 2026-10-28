@@ -48,7 +48,6 @@ _user32.GetWindowThreadProcessId.restype = wintypes.DWORD
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
 WM_APP_OVERLAYS = 0x8000 + 1   # the overlay list changed (stored in self._pending_overlays)
-WM_APP_REFRESH = 0x8000 + 2    # re-evaluate the foreground window
 MOD_CONTROL = 0x0002
 MOD_NOREPEAT = 0x4000
 EVENT_SYSTEM_FOREGROUND = 0x0003
@@ -149,8 +148,6 @@ class MenuHotkeys:
             try:
                 if msg.message == WM_APP_OVERLAYS:
                     self._apply_overlays()
-                elif msg.message == WM_APP_REFRESH:
-                    self._evaluate()
                 elif msg.message == WM_HOTKEY and msg.wParam in HOTKEYS:
                     self._on_press(HOTKEYS[msg.wParam][0], self._target)
             except Exception as e:  # noqa: BLE001 - never kill the loop

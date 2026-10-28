@@ -43,6 +43,11 @@ def _collect(errors, key, fn, default=None):
         return default
 
 
+def _for_ui(nets):
+    """The network list without what only the backend uses (profile XML inputs), so each poll sends less."""
+    return [{k: v for k, v in n.items() if k not in ("auth", "cipher", "profile", "ssid_hex")} for n in nets]
+
+
 class SystemService:
     def __init__(self, state_dir, log=None):
         self.state_file = os.path.join(state_dir, "state.json")
@@ -163,7 +168,7 @@ class SystemService:
                 if not any(n["connected"] for n in nets) and time.monotonic() - self._last_scan > SCAN_EVERY:
                     self._wifi(lambda: self._wl().scan(self._iface()))  # result arrives as a notification
                     self._last_scan = time.monotonic()
-                out["wifi_networks"] = nets
+                out["wifi_networks"] = _for_ui(nets)
                 if any(n["connected"] for n in nets):
                     out["internet"] = _collect(err, "internet", nlm.status)
         except LocationBlocked:
@@ -227,7 +232,7 @@ class SystemService:
         return rc
 
     def wifi_networks(self):
-        return self._wifi(lambda: self._networks(max_age=0))
+        return _for_ui(self._wifi(lambda: self._networks(max_age=0)))
 
     def wifi_connect_start(self, ssid, password=None):
         def go():

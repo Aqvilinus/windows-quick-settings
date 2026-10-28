@@ -88,10 +88,9 @@ def _bt_endpoints():
 def list_audio_devices():
     """Names of paired Bluetooth audio devices known to the audio stack, with connection state."""
     devices = {}
-    for _dev, name, enumerator_name, state in _bt_endpoints():
-        d = devices.setdefault(name, {"name": name, "connected": False, "profiles": []})
+    for _dev, name, _enumerator_name, state in _bt_endpoints():
+        d = devices.setdefault(name, {"name": name, "connected": False})
         d["connected"] = d["connected"] or state == DEVICE_STATE_ACTIVE
-        d["profiles"].append("A2DP" if enumerator_name == "BTHENUM" else "HFP" if "HF" in enumerator_name else enumerator_name)
     return sorted(devices.values(), key=lambda d: d["name"].lower())
 
 

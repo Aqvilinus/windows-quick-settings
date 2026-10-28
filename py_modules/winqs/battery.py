@@ -1,4 +1,4 @@
-"""Battery charge / discharge rate and the estimated time to full: WinRT Windows.Devices.Power (pywinrt), no admin.
+"""Estimated time to a full charge: WinRT Windows.Devices.Power (pywinrt), no admin.
 
 Battery.AggregateBattery combines all batteries the way the Windows battery icon does. Its report gives the rate
 (mW; positive while charging, negative while discharging) and the capacities (mWh).
@@ -7,7 +7,7 @@ import math
 import time
 
 from winrt.windows.devices.power import Battery
-from winrt.windows.system.power import BatteryStatus, PowerManager, PowerSupplyStatus
+from winrt.windows.system.power import BatteryStatus
 
 CV_KNEE = 0.8      # Li-ion: about constant power up to ~80 % (CC), then constant voltage (CV) with a falling current
 CV_END = 0.05      # the charger stops when the power falls to about C/20
@@ -43,23 +43,15 @@ def _time_to_full(full_mwh, now_mwh, rate_mw):
 
 
 def state():
-    """{'present', 'ac', 'charging', 'watts', 'full_seconds'}.
-
-    watts > 0 while discharging, < 0 while charging, None if unknown. full_seconds is the estimated time to a full
-    charge (Windows reports none, so Steam shows "?h ?m"), None when not charging.
-    """
+    """{'full_seconds'}: the estimated time to a full charge (Windows reports none, so Steam shows "?h ?m"), None when
+    not charging."""
     global _rate_avg
     report = Battery.aggregate_battery.get_report()
-    status = report.status
     rate = report.charge_rate_in_milliwatts  # None when unknown
     full, now = report.full_charge_capacity_in_milliwatt_hours, report.remaining_capacity_in_milliwatt_hours
-    charging = status == BatteryStatus.CHARGING
-    watts = round(-rate / 1000.0, 1) if rate else None
     full_seconds = None
-    if charging and rate and rate > 0 and full and now is not None and full > now:
+    if report.status == BatteryStatus.CHARGING and rate and rate > 0 and full and now is not None and full > now:
         full_seconds = _time_to_full(full, now, rate)
     else:
         _rate_avg = None
-    return {"present": status != BatteryStatus.NOT_PRESENT,
-            "ac": PowerManager.power_supply_status != PowerSupplyStatus.NOT_PRESENT,
-            "charging": charging, "watts": watts, "full_seconds": full_seconds}
+    return {"full_seconds": full_seconds}
