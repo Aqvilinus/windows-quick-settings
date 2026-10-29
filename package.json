@@ -1,6 +1,6 @@
 {
   "name": "windows-quick-settings",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Wi-Fi, Bluetooth, audio, brightness, night mode, HDR and a frame limit in Steam Big Picture's Quick Access Menu on Windows",
   "type": "module",
   "scripts": {
