@@ -8,28 +8,59 @@
 #   pip download --no-deps -r requirements.txt -d <dir> --platform win_amd64 --python-version 3.14 --implementation cp --only-binary=:all:
 
 # pywinrt v4 (Windows Runtime APIs). The namespace packages carry an epoch: "4!" is part of the version.
-winrt-runtime==4.0.3 \
-    --hash=sha256:03d76d06172b6f5bb6312aa24f0d25761b1e45fe2b7c3c0b4ad0cd73a06bb293
-winrt-Windows.Devices.Bluetooth==4!10.0.28000.2705 \
-    --hash=sha256:c68bdb970459eab888cf03764d50ee156eedd10fd02aceefb161babad0ba3dc7
-winrt-Windows.Devices.Enumeration==4!10.0.28000.2705 \
-    --hash=sha256:719e7f638db3d324f54ce86ed09689dce11374aa60fbe2b14843651bee266fc8
-winrt-Windows.Devices.Power==4!10.0.28000.2705 \
-    --hash=sha256:4c909a26cbd315e0d9321d1ac1ab56837803c6b5b849e05a0dab4b684e1d46bf
-winrt-Windows.Devices.Radios==4!10.0.28000.2705 \
-    --hash=sha256:1852902c3c89ba9ca291bfa4099d3ead923eca6c38a4c421b99a35cebd717f62
-winrt-Windows.Foundation==4!10.0.28000.2705 \
-    --hash=sha256:b409530668b101cb17b3a6ce02061b9839665c92b64b0563c106186d87562571
-winrt-Windows.Foundation.Collections==4!10.0.28000.2705 \
-    --hash=sha256:f2169228644b86d752dca6f4ba0bb55ee27c5cc1062f3a3f0fbb375f48894bd7
-winrt-Windows.Networking==4!10.0.28000.2705 \
-    --hash=sha256:de24b5d2b8f523159e6559b83c2c8fea4ac5259be877b132a58b2f72c6240cd8
-winrt-Windows.Networking.Connectivity==4!10.0.28000.2705 \
-    --hash=sha256:a625c30770b95dccb6efaa89323dd743705cbec297b879248d2bda453c23ea0f
-winrt-Windows.Storage.Streams==4!10.0.28000.2705 \
-    --hash=sha256:2824e516e328c9ba76ffc7926431255b124b4a9f52c656f0b1e0056a7f8ca7b8
-winrt-Windows.System.Power==4!10.0.28000.2705 \
-    --hash=sha256:7a42d0d805ecf3f5b046f2687cd1e4cdc6af4ec741c532d50a9e0207587accd4
+winrt-runtime==4.1.0 \
+    --hash=sha256:01571f68755750d17518009c00ba21c799b4eddac805bf38cb869da08d38a73f \
+    --hash=sha256:281a6085d07dd941873ef16b7bc236f37ad45bd166435e8cabdeff00c67d2830 \
+    --hash=sha256:2d48b68e36db5822fd040bd3667c178626752649fa6e82c84262aa01bd7eb314 \
+    --hash=sha256:41ff9980d992e9d54124b8f346891974c3b61d7dad1ce921bfe22e2e6046026f \
+    --hash=sha256:453b6d6f8568d639038fe313b37661acf372a8173040f41a36305be95dbf14f0 \
+    --hash=sha256:4fd0f5779c793235aa10d09dfe851c2e7830739b4f41766cc865d4218d2a403f \
+    --hash=sha256:708e176f518d6a1beb81640e6038abf0068b25e624dd11fced10c488934769c8 \
+    --hash=sha256:77b79a83e8af56ea98ae8644d1e9e753376c8d97586986eb05068d49d653389f \
+    --hash=sha256:9d120ebb16b3dbc8aec8b6011f399cc1f0bacfb4bf8ea6cf3b157275e046f288 \
+    --hash=sha256:a1418ed9c3592c48fa74f30004abf10d7e96df33f84e782aa61387af16013375 \
+    --hash=sha256:a2bd0d3018f3c2add91f961305e000e56ef9ec222359d069f91cc2e0d4078ace \
+    --hash=sha256:af422bbcffa7249770ab118bc5b9aa1f8fcd401566abca478f91cf7bd9a8b7dd \
+    --hash=sha256:c299e9b991b623413c5c8773dfaa3f72d039128bdce6ff0b9815c3cb07ba793e \
+    --hash=sha256:c51f2d9c0835e3628b3281eac1d5ef2f7cc772302d6a038f5d2bce9e5591d179 \
+    --hash=sha256:cf9f050cc3565163ec512eda2f834d7c201a2ece54232d7dda770bd9d232d352 \
+    --hash=sha256:d1a9b4b609bece607051b55fa234043150e233a169cd004fd9dae30331562186 \
+    --hash=sha256:d345452652ce7243ce3d97ebf63067f848717a8328cca8c4e851c2d0a53ef577 \
+    --hash=sha256:d8c4654ec0f214a29354b22039d8bd9728968f3195c4cafcded8bfe57cb6fd36 \
+    --hash=sha256:db36eeae93d36d41e6e7e67b529de122b2798ad687d661e63b287169624f6d44 \
+    --hash=sha256:e18810477ee5a23ed67abdbff3c51efd648aaa3938d5f6ce1f5a42d5fb764a56 \
+    --hash=sha256:e22c7dab4e8e6064b440661efaab9aa576cdbf7f72e6f61b79ee28535230b546 \
+    --hash=sha256:f86b52d8c82bfda0a96620a17d6b5362a15d1dc6c0fdf9a80b65c254f39adbaf
+winrt-Windows.Devices.Bluetooth==4!10.0.28000.2957 \
+    --hash=sha256:50fda25dcca0c4bada5acdf39e24f8da8a2ed85c5b98b3aba301815ca5181315 \
+    --hash=sha256:e39bcddf747396e2da78cb8c3d00c3e51214e5f1a9dc213fc009434c5264bbea
+winrt-Windows.Devices.Enumeration==4!10.0.28000.2957 \
+    --hash=sha256:0d76f1961bede3dfaf92939ca16edb882daa97bf6481e2dadc8174fec64e7a7e \
+    --hash=sha256:a25e63b02f2d79e451e6a1a3418bfac527ca7525a4473758bb958ab7b6b8313f
+winrt-Windows.Devices.Power==4!10.0.28000.2957 \
+    --hash=sha256:cccdf061ea10b2adf79159b7f53781ffbde5c62b88b2da3b484e28f57a8b3ef4 \
+    --hash=sha256:e9ed809130ef86ead678436a79462025b9b3ef2c74ca6163c59a4ac17997f9a3
+winrt-Windows.Devices.Radios==4!10.0.28000.2957 \
+    --hash=sha256:27e336bee43b941742b65a66b848735b3eb92ff41436e92dfe87805bd008a084 \
+    --hash=sha256:466c47b468c381192218a6f8744d3f2966b43acd710f004bb8a4b4e4e1bcbf88
+winrt-Windows.Foundation==4!10.0.28000.2957 \
+    --hash=sha256:0669de7ce480806a0f9a46d005837799e37f1738911b54c4bc04788b37974e69 \
+    --hash=sha256:6f7d8e932e283991cd931741f84dc7c2e8bc595b4df09de73d16c1d580fc678a
+winrt-Windows.Foundation.Collections==4!10.0.28000.2957 \
+    --hash=sha256:0401c1b6ed512d1fdad8ba1571698e9000ebee6a69781db9a01994ffcc54a503 \
+    --hash=sha256:38989873bbdace2346d24168ceb66359800b7429128ea2ef1a36da55b255af1e
+winrt-Windows.Networking==4!10.0.28000.2957 \
+    --hash=sha256:1327c5d7209fd272479c5bce5b404b51fe422a609f8ce4bdf80a4b6e2222e388 \
+    --hash=sha256:c62c4fe09b3ba46613486aac0429f5a7d7526f7b5058967d3027605165571a66
+winrt-Windows.Networking.Connectivity==4!10.0.28000.2957 \
+    --hash=sha256:1d45e2dd2786b3a4ef224fe68d6bc9d8852f8b1b8630b37138107f762f76be54 \
+    --hash=sha256:5d859ef7db24842b20a4c559d1b59011d9bdd3d68dd63858291109e3c05ac168
+winrt-Windows.Storage.Streams==4!10.0.28000.2957 \
+    --hash=sha256:6284341b4b01ab872007def0b8d29bf30d84d46f6922f6e42be1d738d6bf2ff7 \
+    --hash=sha256:e113832320f2e7f8b09cedfb400cb7eaf0ac769ad1f2038ddbe88801497916c4
+winrt-Windows.System.Power==4!10.0.28000.2957 \
+    --hash=sha256:34c8aa70678260d44df6f7e38634bbe95a1f788c5ce1860aefa806d9f3411566 \
+    --hash=sha256:eab86475aa5058cebaf29ad1a1a787da80fe445b5df0d4263b5a35325fc25c28
 typing_extensions==4.16.0 \
     --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
 
